@@ -50,6 +50,10 @@ struct OmniboxView: View {
     private final class KeyWatch { var monitor: Any? }
     private var _watch = State(initialValue: KeyWatch())
     @FocusState private var focused: Bool
+    /// When the text last changed: the list is then made again, and a row the
+    /// pointer happens to be resting on is not one it has chosen.
+    private final class Typed { var at = Date.distantPast }
+    private var _typed = State(initialValue: Typed())
 
     private var privately: Bool {
         shell.asking == .newTab(privately: true) || (shell.asking == .address && shell.selected?.isPrivate == true)
@@ -81,13 +85,9 @@ struct OmniboxView: View {
         let exact = plain ? nil : Keywords.exact(typed)
         if let exact { list.append(.keyword(exact.keyword, words: exact.words)) }
         list.append(.typed(typed))
-        if exact == nil, !plain, !typed.contains(" ") {
-            for keyword in Keywords.similar(typed) { list.append(.keywordHint(keyword)) }
-        }
-        if typed.count >= 2 {
-            for command in Commands.matching(typed, in: commands, limit: 3) { list.append(.command(command)) }
-        }
 
+        // The tabs already open come before keywords and commands: asked for
+        // by name, the one wanted is a tab to switch to.
         var seen: Set<URL> = []
         // Not the tab whose own address this is.
         let editing = shell.asking == .address ? shell.selected : nil
@@ -98,6 +98,12 @@ struct OmniboxView: View {
             list.append(.tab(tab))
             tabs += 1
             if tabs >= 3 { break }
+        }
+        if exact == nil, !plain, !typed.contains(" ") {
+            for keyword in Keywords.similar(typed) { list.append(.keywordHint(keyword)) }
+        }
+        if typed.count >= 2 {
+            for command in Commands.matching(typed, in: commands, limit: 3) { list.append(.command(command)) }
         }
         // A private tab's field doesn't search what ordinary browsing kept.
         guard !privately else { return list }
@@ -160,6 +166,7 @@ struct OmniboxView: View {
                             // "claude xyz" is a search of the engine.
                             if chip == nil, chosen != 0, Keywords.exact(old) != nil { plain = true }
                             chosen = 0
+                            _typed.wrappedValue.at = Date()
                             if now.isEmpty { plain = false }
                             // "yt " is the keyword, then a space: its chip.
                             guard chip == nil, !plain, now.count > 1, now.hasSuffix(" "), !now.dropLast().contains(" "),
@@ -178,6 +185,10 @@ struct OmniboxView: View {
                         ForEach(Array(list.enumerated()), id: \.offset) { index, suggestion in
                             row(suggestion, chosen: index == chosen)
                                 .contentShape(Rectangle())
+                                // The row under the pointer is the one Enter takes.
+                                .onHover { inside in
+                                    if inside, Date().timeIntervalSince(_typed.wrappedValue.at) > 0.4 { chosen = index }
+                                }
                                 .onTapGesture { pick(index) }
                         }
                     }
@@ -271,7 +282,7 @@ struct OmniboxView: View {
         .font(.system(size: 14))
         .padding(.horizontal, 12)
         .frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 8).fill((tint ?? .primary).opacity(chosen ? (tint == nil ? 0.1 : 0.16) : 0)))
+        .background(RoundedRectangle(cornerRadius: 8).fill((tint ?? .primary).opacity(chosen ? (tint == nil ? 0.12 : 0.18) : 0)))
     }
 
     private func pick(_ index: Int) {

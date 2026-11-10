@@ -100,8 +100,11 @@ enum Commands {
     static func extras(for window: BrowserWindow) -> [Command] {
         let shell = window.shell
         guard shell.split == nil, let current = shell.selected else { return [] }
+        var named: Set<String> = []
         return shell.tabs.compactMap { tab in
             guard tab !== current, tab.url != nil, tab.profile === shell.profile, !tab.isPrivate || current.isPrivate else { return nil }
+            // Two tabs of one page would be two rows that read alike.
+            guard named.insert(tab.name).inserted else { return nil }
             return Command(title: "Open Side by Side with \(tab.name)", path: "Tab", aliases: "split view") { [weak window, weak tab] in
                 if let window, let tab { window.splitWith(tab) }
             }

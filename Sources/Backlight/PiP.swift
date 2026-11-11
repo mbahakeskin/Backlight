@@ -321,30 +321,77 @@ enum PiP {
     /// The video playing, else (when asked by hand) the largest one ready.
     /// By itself, only one you can hear: a muted one playing is a page's
     /// decoration (behind a sign-in form, a preview under the pointer),
-    /// pages being let to play only those on their own.
+    /// pages being let to play only those on their own. A call's pictures are
+    /// muted too (their sound is in other elements), so while someone is
+    /// heard, the largest live one counts.
     private static let request = """
     const videos = [...document.querySelectorAll("video")].filter((v) => v.readyState > 0 && !v.disablePictureInPicture);
     const heard = (v) => !v.muted && v.volume > 0 && v.clientWidth * v.clientHeight >= 200 * 112;
-    const playing = videos.find((v) => !v.paused && !v.ended && (!byItself || heard(v)));
-    const video = playing || (playingOnly ? null : videos.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0]);
+    let playing = videos.find((v) => !v.paused && !v.ended && (!byItself || heard(v)));
+    // A call (Meet, and the like): the others' pictures come in muted video
+    // elements and their sound in separate audio ones, so no video is "heard"
+    // by itself. When someone's sound is playing, the largest live picture
+    // of the far end is the one to follow, paused or not (Meet leaves it
+    // paused until asked). Never the one of yourself: a camera's track has a
+    // device (its deviceId), a far end's none.
+    if (!playing && byItself) {
+      const sound = [...document.querySelectorAll("audio, video")].some((a) =>
+        !a.paused && !a.muted && a.volume > 0 && a.srcObject && a.srcObject.getAudioTracks().some((t) => t.readyState === "live"));
+      if (sound) {
+        const far = (v) => v.srcObject instanceof MediaStream && !v.ended && v.clientWidth * v.clientHeight >= 200 * 112
+          && v.srcObject.getVideoTracks().some((t) => t.readyState === "live" && !t.getSettings().deviceId);
+        playing = videos.filter(far).sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
+      }
+    }
+    const video = playing ||(playingOnly ? null : videos.sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0]);
     if (!video) return "no video";
     if (document.pictureInPictureElement === video) return "already";
     // The window went to another desktop: the video, unseen, is moved a
     // screen's width the way the desktop went, where the system's animation
     // starts from. Put back once it is in.
-    if (slide) {
-      const style = video.style, kept = [style.transform, style.transition];
+    // Not for a call's picture (Meet keeps its own style on it, and the gap
+    // it left stayed: measured 2026-11-12), and what the video's style was
+    // is kept once, on the element: a second go, with the first not yet put
+    // back (its timers wait while the page is out of sight), would keep the
+    // moved style as the one to return to.
+    if (slide && !(video.srcObject instanceof MediaStream)) {
+      const style = video.style;
+      const kept = video.__backlightKept || (video.__backlightKept = [style.transform, style.transition]);
       style.transition = "none";
       style.transform = `translateX(${-slide * screen.width}px)`;
       let restored = false;
-      const restore = () => { if (restored) return; restored = true; [style.transform, style.transition] = kept; };
+      const restore = () => {
+        if (restored) return;
+        restored = true;
+        [style.transform, style.transition] = kept;
+        video.__backlightKept = null;
+      };
       video.addEventListener("enterpictureinpicture", () => setTimeout(restore, 100), { once: true });
+      video.addEventListener("leavepictureinpicture", restore, { once: true });
       setTimeout(restore, 2500);
     }
     try {
-      await video.requestPictureInPicture();
+      // The method of the prototype, not the element's: Meet puts its own on
+      // each of its videos, `() => new Promise(() => {})` (it logs an
+      // impression and never answers), so asking the element is left waiting
+      // for good (measured 2026-11-12); WebKit's own answers at once.
+      // Never left waiting either way: a request nothing answers would hold
+      // the tab's "moved by itself" mark for good.
+      if (video.paused && video.srcObject instanceof MediaStream) await video.play().catch(() => {});
+      await Promise.race([HTMLVideoElement.prototype.requestPictureInPicture.call(video), new Promise((_, no) => setTimeout(() => no(new Error("no answer")), 4000))]);
       return "in";
     } catch (e) {
+      // A live picture that won't take the standard request: Safari's older
+      // call (the standard exit takes it out again).
+      if (video.srcObject instanceof MediaStream && typeof video.webkitSetPresentationMode === "function"
+          && video.webkitSupportsPresentationMode("picture-in-picture")) {
+        video.webkitSetPresentationMode("picture-in-picture");
+        await new Promise((resolve) => {
+          video.addEventListener("enterpictureinpicture", resolve, { once: true });
+          setTimeout(resolve, 1500);
+        });
+        if (document.pictureInPictureElement === video || video.webkitPresentationMode === "picture-in-picture") return "in";
+      }
       return "refused: " + (e && e.name) + ": " + (e && e.message);
     }
     """
@@ -354,9 +401,20 @@ enum PiP {
         let key = ObjectIdentifier(tab)
         if byItself { automatic.insert(key) }
         call(web, request, ["playingOnly": playingOnly, "byItself": byItself, "slide": slide]) { result, error in
-            let answer = (result as? String) ?? error?.localizedDescription ?? "?"
+            var answer = (result as? String) ?? error?.localizedDescription ?? "?"
+            // What the page's own exception said, and where (line of the script above).
+            if result == nil, let info = (error as NSError?)?.userInfo, let message = info["WKJavaScriptExceptionMessage"] {
+                answer += " (\(message), line \(info["WKJavaScriptExceptionLineNumber"] ?? "?"))"
+            }
             Debug.log("pip", "\(tab.name): \(byItself ? "by itself" : "asked"): \(answer)")
-            if answer == "in" || answer == "already" { tab.inPictureInPicture = true }
+            if answer == "in" || answer == "already" {
+                tab.inPictureInPicture = true
+                // The page's own events on the way in (a paused picture
+                // started for it: "playing", before it is in) are heard as
+                // "out" and take the mark off; in, the mark is put back, or
+                // the tab is never brought back (measured 2026-11-12, Meet).
+                if byItself { automatic.insert(key) }
+            }
             if answer != "in" && answer != "already" {
                 automatic.remove(key)
                 if !byItself { (tab.host as? BrowserWindow)?.say("No video to put in Picture in Picture") }

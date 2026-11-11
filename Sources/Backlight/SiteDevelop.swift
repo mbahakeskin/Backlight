@@ -53,11 +53,29 @@ final class SiteDevelop {
         if let data = try? JSONEncoder().encode(sites) { UserDefaults.standard.set(data, forKey: Self.key) }
     }
 
+    /// Settings Backlight gives a site itself, where the person has kept none
+    /// of their own for it (theirs always win, "Default" included).
+    ///
+    /// YouTube: its offline downloads (Premium; Music's too) are offered only
+    /// to Chrome. Told "Chrome", the page's menu has Download (measured on
+    /// 2026-11-12: the video's menu has "İndir" with this agent and only
+    /// "Bildir" with Safari's; the file is kept by the page, in the browser,
+    /// as it is in Chrome). Settings › Tabs has the switch.
+    static let youTubeKey = "youtube.chromeAgent"
+    static let youTubeAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+
+    static func builtIn(_ host: String) -> DevelopSettings? {
+        let host = host.lowercased()
+        guard host == "youtube.com" || host.hasSuffix(".youtube.com"),
+              UserDefaults.standard.object(forKey: youTubeKey) as? Bool ?? true else { return nil }
+        return DevelopSettings(userAgent: youTubeAgent)
+    }
+
     /// A tab is about to go to `host` (decided on before its request is made, so the settings reach it).
     @MainActor
     func prepare(_ tab: Tab, for host: String) {
         guard !tab.isPrivate, tab.developHost != host else { return }
-        if let saved = sites[host] {
+        if let saved = sites[host] ?? Self.builtIn(host) {
             tab.developHost = host
             apply(saved, to: tab)
         } else if tab.developHost != nil {

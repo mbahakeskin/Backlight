@@ -142,11 +142,14 @@
     <div class="wrap agents">
       <div>
         <h2 id="ah" class="reveal">Your agent can use it. <span class="n">With your say.</span></h2>
-        <p class="lede reveal">Turn it on in Settings and Claude Code, the Claude app, Antigravity or any MCP client gets 49 tools for your tabs. No account, no extension.</p>
+        <p class="lede reveal">Turn it on in Settings and Claude Code, the Claude app, Antigravity or any MCP client gets 50 tools for your own tabs, signed in as you. No account, no extension, no second browser to sign in to.</p>
         <ul class="agent-points reveal">
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.4 2.4 4.6-4.8"/></svg></span><div><h3>Asked per site</h3><p>It asks once to read a site and again before it clicks or types there. A no stays a no.</p></div></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><div><h3>Passwords stay yours</h3><p>It never sees password, card or one-time-code fields, and private tabs are never listed.</p></div></li>
           <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M9 9h6v6H9z"/></svg></span><div><h3>You can see it, and stop it</h3><p>The tab it works in is framed and marked in the sidebar, with a Stop button.</p></div></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg></span><div><h3>Your browser, not another</h3><p>Your tabs and your sign-ins, for any agent that speaks MCP. Claude's built-in browser is a pane apart from yours, and Claude in Chrome is an extension that sees every page.</p></div></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10"/><path d="M4 12h16"/><path d="M4 17h7"/><circle cx="17" cy="7" r="2"/></svg></span><div><h3>It doesn't take your Mac</h3><p>Clicks and keys go straight to the page's view: your pointer and window stay put, and tabs behind the one you look at work.</p></div></li>
+          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/><path d="m13.5 6-3 12"/></svg></span><div><h3>Made for building sites</h3><p>A local server's page on a slow or offline connection, touch events, drag and drop, and the React or Vue component an element belongs to.</p></div></li>
         </ul>
       </div>
       <div class="agent-demo reveal" id="agentDemo" aria-label="An example of an agent at work, drawn here">
@@ -240,7 +243,7 @@
           <h3>What it cannot do yet</h3>
           <ul>
             <li><b>Passkeys.</b><span>WebKit gives them to a browser only with an entitlement Apple grants on request, tied to a paid developer account.</span></li>
-            <li><b>Chrome's own tools.</b><span>An agent here can't emulate touch or throttle the network.</span></li>
+            <li><b>Device emulation, in part.</b><span>For an agent here, touch is made by a script and a slow network by the inspector, not by the engine; a screen's pixel ratio can't be set.</span></li>
             <li><b>Pages built only for Chrome.</b><span>It is WebKit, like Safari, so a few of those misbehave.</span></li>
           </ul>
         </div>

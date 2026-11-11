@@ -255,7 +255,8 @@ What an agent can drive today, in one line each (as their makers describe them,
 November 2026):
 
 - **Claude's built-in browser:** a browser pane inside the Claude app, apart
-  from your own browser, with sessions of its own; Claude drives it.
+  from your own browser, with sessions of its own; Claude drives it, and the
+  app starts your dev server for it.
 - **Claude in Chrome:** Anthropic's extension for desktop Google Chrome, in beta
   on the paid plans; Claude drives it through Chrome's debugger. Per site you
   approve what it may do ([permissions](https://support.claude.com/en/articles/12902446-claude-in-chrome-permissions-guide)),
@@ -268,40 +269,95 @@ November 2026):
   ([TechCrunch](https://techcrunch.com/2026/07/09/openai-is-shutting-down-atlas-but-its-ai-browser-ambitions-are-still-growing/),
   [9to5Google](https://9to5google.com/2026/10/16/chatgpt-gets-deeper-google-chrome-integration-including-control-over-tabs/)).
 
-What this has that none of them has:
+What this one is, and each is measured or listed further down, under Agents:
 
-- **Any agent, not one company's.** The tools are an MCP server. Claude Code,
-  the Claude app, Antigravity, or whatever else speaks MCP, and the model you
-  already pay for; each of the three above works with its own assistant only.
-- **WebKit.** The engine of Safari and of every browser on an iPhone or iPad.
-  The extensions above run in Chrome and its cousins, so what an agent tests
-  there is Blink. For a site that has to work on an iPhone, this is the one
-  that tests it in the engine it will meet.
-- **Your own browser, with nothing to install in it.** Your tabs and sign-ins,
-  no second browser to sign in to (Claude's built-in one has its own
-  sessions), no extension that has to see every page.
-- **Local sites, as a person building them works.** A local server's page on a
-  3G, delayed or offline connection in the same tab (`throttle`), touch
-  events (`resize` with `touch`), sliders and HTML5 drag and drop (`drag`),
-  `pick` (the selector, the styles that aren't the default's, the React or Vue
-  component an element belongs to, its file, the page's recent errors),
-  `api` (a site's own JSON instead of scraping its page), requests with
-  their headers and bodies (secrets replaced), `storage`, `inspect`,
-  `performance`, `block`, `render`, `source`, WebKit's own experimental and
-  debugging `features`.
-- **The whole browser, not only the page.** `history`, `bookmarks`,
-  `downloads`, `clipboard`, `arrange`, `extensions`, `save_page` (PDF or web
-  archive), the text you have selected, and `dialog` for the alert, confirm or
-  prompt that stops a page until someone answers it. Claude in Chrome's list
-  has none of these.
-- **No site is closed to it, and none is open until you say.** Read, read
-  only, read and act, or never, per site, asked in Backlight when the agent
-  first needs it (or set before it asks); a list of what agents did; the tab it
-  works in framed, with a Stop button; one Bypass switch. Password, card and
-  one-time-code fields and private tabs never reach it.
-- **Nothing of Backlight's own on a server.** No account, no subscription, no
-  telemetry; its program is the server, over a socket only your user can open.
-  MIT licence, and the plain build has none of it.
+- **Built to cost an agent fewer turns.** An agent's time goes to its own
+  thinking and to waiting. Every click, key and fill comes back with what it
+  changed on the page (what appeared, went or changed among the things to click
+  or fill, or what is on the new page), so the next call needs no read in
+  between. A thing is named by what it says or by a selector, looked for when
+  the call is made, so one `batch` can go to a page, search and click, with
+  `expect` to wait for the page to be so; `fill_form` fills a whole form,
+  `search` uses a site's search, `read_pages` reads up to 25 addresses in one
+  call; calls that arrive together run together (three 2 s waits take 2.4 s,
+  not 7.3). Nothing is waited for by guessing: input is waited for until the
+  page has taken it, and a click's effects until the page has gone quiet, which
+  on 17 patterns of page reaction missed none and waited 43 ms where a fixed
+  150 ms window missed 31 of 85 and waited 107 ms too long; a click takes 0.04
+  s (it was 0.23). The list the agent is handed is short (its tool names, a
+  line, its parameters), and `help` gives the rest one tool at a time.
+- **Reads a page as an agent needs it, not as a person sees it.** A long page
+  in windows that say what they hold; `find` for several things at once, with
+  the closest names first; `read_page` with `since_last` for only what changed;
+  a page's own JSON instead of its markup (`api`); the products a page
+  declares (`structured`: name, price, stock); a screenshot the agent sizes,
+  marks with numbers, takes a region or a whole page of (a `tile` at a time or
+  an `overview`); the language a page is in; what is behind an open dialog;
+  and `pick`: you point at an element and the agent is told its selector, its
+  styles that aren't the default's, the React or Vue component it belongs to,
+  its file, and the page's recent errors.
+- **The whole browser, not only the page, and the developer's tools.**
+  `history`, `bookmarks`, `downloads`, `clipboard`, `arrange` (pin, copy, sleep
+  and move tabs, take one to a window), `extensions`, `save_page` (PDF or web
+  archive), `selection`, `dialog` (the alert, confirm or prompt that stops a
+  page until someone answers it), `storage` (cookies, local and session
+  storage, databases), `inspect` (styles, box, HTML), `performance` (load
+  timings, paints, slowest requests), `source` (the page as the site sent it),
+  `block`, `render` (a tab without its JavaScript, images or styles),
+  `site_info` (certificate, what was allowed), `network` with headers and
+  bodies (secrets replaced), WebKit's own experimental and debugging
+  `features`. And for a page on localhost as much as any: a slow, delayed or
+  offline connection in the same tab (`throttle`), touch events (`resize` with
+  `touch`), sliders and HTML5 drag and drop (`drag`).
+- **Yours to allow, to watch and to stop.** Off until you turn it on. Per
+  site, once to read and once to click and type (or read only, or never), asked
+  in Backlight when the agent first needs it, or set before it asks; Settings
+  lists what agents have done; the tab it works in is framed and marked in the
+  sidebar, with a Stop button that lets everything go. Password, card and
+  one-time-code fields are never given and nothing is typed into one; private
+  tabs are never listed; `upload` and `download` ask each time; a profile of
+  its own ("Agent", with no sign-ins) is there when you don't want it in yours.
+  These are rules of the program, not a model's judgement of each action.
+- **Any agent, connected in a click.** The tools are an MCP server: Claude
+  Code, the Claude app, Antigravity, or whatever else speaks MCP, with the
+  model you already pay for. Settings › Agents › Connect adds Backlight to
+  each of them and writes a skill for Claude Code on how to work in it without
+  wasting turns. Each of the three above works with its own assistant only.
+- **Your own browser, on WebKit, kept light.** Your tabs, your sign-ins and your
+  extensions, with no second browser to sign in to and nothing to install in
+  your browser. WebKit is the engine of Safari and of every browser on an
+  iPhone or iPad; the two extensions run in Chrome and its cousins, so what an
+  agent tests there is Blink. Clicks, keys and typing are AppKit's own events
+  handed to the page's view, so tabs behind the one you look at work and your
+  pointer stays where it is; pictures are drawn off the main thread; the tabs
+  an agent opened are let go after two minutes.
+- **No account, no subscription, nothing of its own on a server.** MIT
+  licence; its program is the server, over a socket only your user can open;
+  the plain build has none of it.
+
+The tools each one lists to its agent, side by side (a dash is no tool for it
+in that list; Backlight's from its own, the other two's as Claude is shown them
+in November 2026):
+
+| | Backlight | Claude in Chrome | Claude's built-in browser |
+|---|---|---|---|
+| Read by numbers and names, click, type, scroll, hover, drag | yes | yes | yes |
+| Run JavaScript, read the console and requests | yes | yes | yes |
+| Batch several calls | yes (`optional`, `repeat`, `expect`) | yes | yes |
+| Resize the page | yes | yes | yes |
+| Upload files, record a GIF | yes | yes | — |
+| Start your dev server and show it | — | — | yes |
+| Drive several browsers | — | yes | — |
+| Read many pages in one call, a page's own JSON, the products a page declares | yes | — | — |
+| Pick an element for the agent (component, file, errors) | yes | — | — |
+| History, bookmarks, downloads, clipboard | yes | — | — |
+| Pin, copy, sleep and move tabs, take one to a window; list extensions | yes | — | — |
+| Cookies and storage, element styles, load timings, page source | yes | — | — |
+| Block requests, render without scripts, WebKit's own features | yes | — | — |
+| Answer an alert or prompt, save a page as PDF | yes | — | — |
+| A slow, delayed or offline network | yes | — | — |
+| Touch events from clicks and drags | yes | — | a preset reports touch points; clicks stay mouse clicks |
+| Used by an agent that is not Claude or ChatGPT | yes | — | — |
 
 Where they are ahead, plainly:
 

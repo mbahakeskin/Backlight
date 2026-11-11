@@ -135,7 +135,20 @@ final class InspectorWatch: NSObject, WKScriptMessageHandler {
             loading = nil
         }
         page.configuration.userContentController.add(self, name: "bsQuiet")
-        let result = try? await page.callAsyncJavaScript(InspectorWatch.hook, arguments: [:], in: nil, contentWorld: .page)
+        return await runHook()
+    }
+
+    /// The hook, run in the inspector's page. A page that is being loaded again (a connection made after one was closed:
+    /// its old page is there until the new one replaces it) loses the call or has no model yet, so it is tried again for
+    /// a few seconds before giving up.
+    private func runHook() async -> Bool {
+        guard let page = frontend else { return false }
+        var result: Any?
+        for attempt in 0..<30 {
+            result = try? await InspectorWatch.within(3) { try await page.callAsyncJavaScript(InspectorWatch.hook, arguments: [:], in: nil, contentWorld: .page) as? String }
+            if result as? String == "ready" { break }
+            if attempt < 29 { try? await Task.sleep(for: .milliseconds(100)) }
+        }
         Debug.log("agent", "inspector for the tab: \(String(describing: result))")
         return result as? String == "ready"
     }
@@ -217,11 +230,60 @@ final class InspectorWatch: NSObject, WKScriptMessageHandler {
       clearTimeout(S.wake);
       S.wake = setTimeout(check, 10);
     };
+    // A network limit (`throttle`). The inspector's interception holds each request and each response until it is told to
+    // go on, and they are let go after what the connection would have taken: half the delay on each way, and a response its
+    // length over the speed, as one link shared by all (each waits for those before it). A response whose length isn't
+    // said (a stream, a chunked page) is held by the delay alone. Offline fails every request.
+    const TH = { on: false, enabled: false, ours: false, down: 0, latency: 0, offline: false, free: 0 };
+    const header = (headers, name) => {
+      if (!headers) return null;
+      for (const key of Object.keys(headers)) if (key.toLowerCase() === name) return headers[key];
+      return null;
+    };
+    const intercepted = (o) => {
+      const stage = o.method === "Network.requestIntercepted" ? "request" : "response";
+      const requestId = o.params.requestId;
+      const release = () => { target.NetworkAgent.interceptContinue.invoke({ requestId, stage }).catch(() => {}); };
+      // A long wait is kept by Backlight's own clock (a hidden page's timers can't be counted on for seconds), which
+      // calls __bsRelease when it is over.
+      const after = (ms) => { if (ms <= 1) release(); else if (ms < 400) setTimeout(release, ms); else post({ k: "hold", requestId, stage, ms }); };
+      if (stage === "request") {
+        if (TH.offline) { target.NetworkAgent.interceptRequestWithError.invoke({ requestId, errorType: "General" }).catch(() => {}); return; }
+        return after(TH.latency / 2);
+      }
+      let wait = TH.latency / 2;
+      const length = parseInt(header(o.params.response && o.params.response.headers, "content-length"), 10);
+      if (TH.down > 0 && length > 0) {
+        const start = Math.max(Date.now() + wait, TH.free);
+        TH.free = start + length / TH.down * 1000;
+        wait = TH.free - Date.now();
+      }
+      after(wait);
+    };
+    window.__bsRelease = (requestId, stage) => { target.NetworkAgent.interceptContinue.invoke({ requestId, stage }).catch(() => {}); return true; };
+    window.__bsThrottle = async (down, latency, offline) => {
+      TH.down = down; TH.latency = latency; TH.offline = offline;
+      const on = down > 0 || latency > 0 || offline;
+      if (on && !TH.enabled) {
+        TH.on = true; TH.free = 0;
+        // The inspector's own page may have switched interception on already; then it is its to switch off.
+        TH.ours = true;
+        try { await target.NetworkAgent.setInterceptionEnabled.invoke({ enabled: true }); } catch (e) { TH.ours = false; }
+        for (const stage of ["request", "response"]) await target.NetworkAgent.addInterception.invoke({ url: ".*", stage, isRegex: true });
+        TH.enabled = true;
+      } else if (!on && TH.enabled) {
+        TH.on = false; TH.enabled = false;
+        for (const stage of ["request", "response"]) await target.NetworkAgent.removeInterception.invoke({ url: ".*", stage, isRegex: true }).catch(() => {});
+        if (TH.ours) await target.NetworkAgent.setInterceptionEnabled.invoke({ enabled: false }).catch(() => {});
+      }
+      return "ok";
+    };
     for (const p of protos) {
       const orig = p.dispatch;
       p.dispatch = function (message) {
         const o = typeof message === "string" ? JSON.parse(message) : message;
         const method = o && o.method;
+        if (TH.on && (method === "Network.requestIntercepted" || method === "Network.responseIntercepted")) { intercepted(o); return; }
         if (method && method.startsWith("Timeline.")) {
           if (method === "Timeline.eventRecorded") { note(o.params.record, isBackground(o.params.record)); check(); }
           return;
@@ -249,6 +311,15 @@ final class InspectorWatch: NSObject, WKScriptMessageHandler {
     """#
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if let body = message.body as? [String: Any], body["k"] as? String == "hold", let requestId = body["requestId"] as? String,
+           let stage = body["stage"] as? String, let ms = (body["ms"] as? NSNumber)?.doubleValue {
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(ms))
+                _ = try? await self?.frontend?.callAsyncJavaScript("return window.__bsRelease(requestId, stage);", arguments: ["requestId": requestId, "stage": stage],
+                                                                   in: nil, contentWorld: .page)
+            }
+            return
+        }
         guard let body = message.body as? [String: Any], body["k"] as? String == "quiet", let id = body["id"] as? Int else { return }
         decided = max(decided, id)
         decision.wake()
@@ -275,10 +346,99 @@ final class InspectorWatch: NSObject, WKScriptMessageHandler {
         return true
     }
 
+    /// A network limit on the tab's page: bytes a second towards it (0: none), delay added to a round trip in milliseconds,
+    /// offline or not. It lives in the inspector's connection and ends with it, so while one is on, the connection is
+    /// kept (the memory above is what it costs).
+    struct Limits: Equatable {
+        var down = 0
+        var latency = 0
+        var offline = false
+        var isOn: Bool { down > 0 || latency > 0 || offline }
+    }
+    private(set) var limits = Limits()
+
+    /// Puts the limits on what the page asks for from now on, or lifts them when none is on. Nil when done, else why not.
+    func limit(_ new: Limits) async -> String? {
+        var failure = "The inspector is not connected."
+        // A connection made after one was closed has its page loaded again after the first answer: the call may be lost, or
+        // the hook gone. Asked again, with the hook put back if it isn't there, for a few seconds.
+        for attempt in 0..<8 {
+            guard let frontend else { return failure }
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(300)) }
+            do {
+                let there = try await InspectorWatch.within(3) {
+                    try await frontend.callAsyncJavaScript("return typeof window.__bsThrottle;", arguments: [:], in: nil, contentWorld: .page) as? String
+                }
+                if there != "function", !(await runHook()) { failure = "The inspector's page didn't come up."; continue }
+                let answer = try await InspectorWatch.within(5) {
+                    try await frontend.callAsyncJavaScript("return await window.__bsThrottle(down, latency, offline);",
+                                                           arguments: ["down": new.down, "latency": new.latency, "offline": new.offline],
+                                                           in: nil, contentWorld: .page) as? String
+                }
+                guard answer == "ok" else { failure = "The inspector did not take the limit."; continue }
+                limits = new
+                touch()
+                return nil
+            } catch {
+                let said = ((error as NSError).userInfo["WKJavaScriptExceptionMessage"] as? String) ?? error.localizedDescription
+                failure = "The inspector refused: \(said)"
+            }
+        }
+        touch()
+        return failure
+    }
+
+    private struct TimedOut: Error {}
+
+    private nonisolated final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        /// True the first time.
+        func first() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if done { return false }
+            done = true
+            return true
+        }
+    }
+
+    /// A call into the inspector's page, given up on after `seconds`: one made while the page is being loaded again is
+    /// sometimes never answered.
+    private static func within<T: Sendable>(_ seconds: Double, _ work: @escaping @MainActor @Sendable () async throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, any Error>) in
+            let once = Once()
+            Task { @MainActor in
+                do {
+                    let value = try await work()
+                    if once.first() { continuation.resume(returning: value) }
+                } catch {
+                    if once.first() { continuation.resume(throwing: error) }
+                }
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(seconds))
+                if once.first() { continuation.resume(throwing: TimedOut()) }
+            }
+        }
+    }
+
+    /// The agent lets a tab go: its limit goes, and the connection with it.
+    static func lift(_ tab: Tab) {
+        guard let watch = watches[tab.id], watch.limits.isOn else { return }
+        Task { _ = await watch.limit(Limits()) }
+    }
+
+    /// The agent is gone: no limit stays on any tab.
+    static func liftAll() {
+        for watch in watches.values where watch.limits.isOn { Task { _ = await watch.limit(Limits()) } }
+    }
+
     /// The connection is kept for a few seconds after the last use, then closed (WebKit gives the inspector's process back
-    /// within a minute): a lease on memory, not a wait for anything.
+    /// within a minute): a lease on memory, not a wait for anything. Not while a limit is on.
     private func touch() {
         lease?.cancel()
+        lease = nil
+        guard !limits.isOn else { return }
         lease = Task { [weak self] in
             try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled else { return }
@@ -289,6 +449,7 @@ final class InspectorWatch: NSObject, WKScriptMessageHandler {
     func detach() {
         lease?.cancel()
         lease = nil
+        limits = Limits()
         frontend?.configuration.userContentController.removeScriptMessageHandler(forName: "bsQuiet")
         frontend = nil
         inspector.perform(NSSelectorFromString("close"))

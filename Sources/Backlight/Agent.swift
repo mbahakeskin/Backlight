@@ -77,7 +77,7 @@ enum AgentPower: String, CaseIterable, Identifiable {
         case .history: "Search the pages you have visited and your bookmarks, and see what was downloaded this session. To find a page you were on, or a file you saved."
         case .clipboard: "Read what you last copied, and put text on it. What you copied may be a password from a password manager, so it is off until you say."
         case .extensions: "List the extensions installed in Backlight, see the problems WebKit reports for them (and, with Developer tools on, what their background pages write to the console), and reload one that has got stuck. It can't add, remove or change them."
-        case .developer: "A page's console and network requests, scripts of the agent's own in a page, a look at an element's styles, load timings, blocking some requests, a tab with JavaScript, images or styles switched off, and a page's source as the site sent it. A script reaches everything on the page, password fields too. Pages opened from now on are watched."
+        case .developer: "A page's console and network requests, scripts of the agent's own in a page, a look at an element's styles, load timings, blocking some requests, a network speed limit, delay or offline mode, a tab with JavaScript, images or styles switched off, and a page's source as the site sent it. A script reaches everything on the page, password fields too. Pages opened from now on are watched."
         case .bodies: "With the network requests, what was sent and what came back, for the page's own fetch and XHR calls. Passwords, tokens, keys and cookies in them are replaced by [hidden]. Pages opened from now on."
         case .storage: "List a site's cookies, local and session storage and databases, and clear them (you are asked first). A cookie's value is shown only when the agent asks for values, never an HttpOnly one's, and tokens and passwords stay hidden."
         case .features: "List WebKit's experimental and debugging features and switch them, to try a page with one on or off. A change lasts only while the agent is connected, and what touches privacy or security (tracking prevention, cookies, sandboxing, camera and microphone) stays yours, in the Develop and Debug menus."
@@ -90,7 +90,7 @@ enum AgentPower: String, CaseIterable, Identifiable {
         case .history: ["history", "bookmarks", "downloads"]
         case .clipboard: ["clipboard"]
         case .extensions: ["extensions"]
-        case .developer: ["console", "network", "evaluate", "inspect", "performance", "block", "render", "source"]
+        case .developer: ["console", "network", "evaluate", "inspect", "performance", "block", "throttle", "render", "source"]
         case .bodies: ["network"]
         case .storage: ["storage"]
         case .features: ["features"]
@@ -293,7 +293,11 @@ final class AgentAccess {
         guard let client = connections.removeValue(forKey: ObjectIdentifier(connection)) else { return }
         clients = connections.values.sorted()
         Debug.log("agent", "\(client) disconnected")
-        if connections.isEmpty { stop(listening: false, announce: true) }
+        if connections.isEmpty {
+            // No network limit stays on a tab once the agent that put it there is gone.
+            InspectorWatch.liftAll()
+            stop(listening: false, announce: true)
+        }
     }
 
     // MARK: - the tabs it works in
@@ -302,6 +306,7 @@ final class AgentAccess {
 
     /// A tab opened for one job and closed after it: no longer held.
     func forget(_ tab: Tab) {
+        InspectorWatch.lift(tab)
         held.remove(tab.id)
         cancelDue(tab.id)
         calls[tab.id] = nil

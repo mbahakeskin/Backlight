@@ -114,6 +114,9 @@ final class Tab: NSObject, Identifiable {
     @ObservationIgnored var developHost: String?
 
     #if AGENT
+    /// Touch events are made for its pages (TouchEmulation.swift), and the script that does it.
+    @ObservationIgnored var touch = false
+    @ObservationIgnored var touchScript: WKUserScript?
     // What the agent tools keep with a tab (see Agent.swift).
     /// Its number, as the agent knows it.
     @ObservationIgnored var agentNumber: Int?

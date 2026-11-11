@@ -251,11 +251,15 @@ otherwise it signs ad hoc, and macOS asks again after each build.
 
 ## Agents
 
-Anthropic's own extension, Claude in Chrome, drives pages through Chrome's
-debugger, which WebKit's extensions don't have. Backlight offers the same
-things itself, as tools over the Model Context Protocol, with no key and no
-account of its own: whichever agent you already use calls them (Claude Code,
-the Claude app, Antigravity, or any other MCP client).
+**A browser an agent can drive without taking it over.** Whichever agent you
+already use (Claude Code, the Claude app, Antigravity, any MCP client) gets 50
+tools for your real tabs, signed in as you, and you say site by site what it
+may do. No extension, no key, no account of its own, and Backlight itself
+talks to no server. It does what Anthropic's Claude in Chrome does through
+Chrome's debugger, which WebKit's extensions don't have, with tools of its own
+over the Model Context Protocol, and more of what a person building a site
+needs: a local server's page on a slow connection, touch events, drag and
+drop, the component an element belongs to.
 
 It is in the build only when asked for: `./build.sh agent`, which is also what
 a release is (from 0.6.0 on, a release has this build alone). The plain build,
@@ -282,7 +286,7 @@ passes each call to the running browser over a socket in its folder that only
 your user can open.
 
 The agent is handed a short list: each tool's name, a line and its
-parameters (about 17,000 characters for 48 tools, where 29,000 were for 42).
+parameters, so that the list stays small as the tools grow.
 The whole description of any tool, what each parameter means and the limits,
 is one call away: `help` (with `tool`; without, the list). Settings › Agents ›
 Connect also writes a skill for Claude Code (`~/.claude/skills/backlight`)
@@ -431,7 +435,10 @@ The tools:
   `save_page` (PDF or web archive, into Downloads), `record` (a GIF of the
   tab).
 - `drag` (sliders, sortable lists, canvases, text selection: the same real
-  events; a page that uses the browser's own drag and drop may not take it),
+  events; and where the page has an element with `draggable="true"` at the
+  start, its own drag and drop: the page is sent `dragstart`, `dragenter`,
+  `dragover`, `drop` and `dragend` as a script would, and the answer says
+  whether anything took the drop),
   `screenshot` with a `region` (enlarged, to read small print), `key` with a
   `repeat`, and `batch` (several tools in one call, stopping at the first
   that fails).
@@ -439,7 +446,34 @@ The tools:
   page stands in a frame in the window, which keeps its own size), the light or
   dark look the page is told of, the zoom, and the way the browser introduces
   itself to sites (a phone's or a tablet's, or any user agent given). `desktop`
-  fills the window again; there is no touch emulation in WebKit.
+  fills the window again. `touch` (on with the phone and tablet presets, off
+  with desktop): WebKit on a Mac has no touch events, so a script makes them: a
+  page gets `TouchEvent`, `ontouchstart` (as a property and as an attribute),
+  `maxTouchPoints` 5 and a coarse pointer for `matchMedia`, and what the
+  agent's clicks and drags are made of (a press, moves, a release) is sent to it
+  as `touchstart`, `touchmove` and `touchend` and as pointer events of type
+  touch (Hammer.js, which reads those, saw taps, pans and swipes). Not made:
+  `@media (pointer: coarse)` in a style sheet, more than one finger, scrolling by touch;
+  and the events are a script's (`isTrusted` is false).
+- `throttle` (developer tools): a tab's page on a slow, delayed or offline
+  connection: `preset` 3g, dsl, edge, offline or none, or `bytes_per_second`
+  and `latency_ms`. WebKit has no network conditions of its own (the inspector's
+  were taken out in 2024, and the one in this macOS answers "not found"), so it
+  is made with the Web Inspector's request interception: each request and each
+  response is held and let go after the time the connection would take (half the
+  delay on each way, and a response its `Content-Length` over the speed, as one
+  link shared by all). It is the same tab, signed in as it was, at the same
+  address, `localhost` and the addresses the page itself names included; the
+  limit holds for the requests made from then on (reload to see a load that
+  way) and ends when the agent lets the tab go. Measured on a local server: a
+  1.5 MB file at a 300 kB/s limit took 5.2 s (287 kB/s), a 6 s delay took 6.2 s,
+  offline failed the requests and lifting it brought them back. It is an
+  approximation of a slow link, not one: a response comes at once after its wait
+  (a page doesn't fill in gradually), one with no length (a stream, a chunked
+  page) is held by the delay alone, and what is cached, in flight already or a
+  WebSocket is not held. It needs the inspector connected to the tab (about
+  130 MB while a limit is on, and the page can tell it is inspected), so it
+  can't be done while the person has the inspector open on that tab.
 - More of the page: `site_info` (whether the connection is secure, the
   certificate's holder, issuer and expiry, what the person allowed the site,
   its cookie count, the zoom, how the tab is set), `selection` (what you have selected), `screenshot` of
@@ -502,54 +536,70 @@ does not have. Keep it to sites you trust.
 A frame from another site is reached by the picture and by position only:
 its text and fields aren't listed.
 
-### Against Claude in Chrome
+### Against Claude's built-in browser and Claude in Chrome
 
-Compared by the tools each has (Claude in Chrome's from its own list), this
-does more in these ways:
+Claude reaches a browser in three ways: its own built-in browser (a pane in
+the Claude app, a browser apart from yours), Claude in Chrome (an extension in
+your Chrome), and this (your Backlight, over MCP). Compared by the tools each
+has (the other two's from their own lists, in November 2026), this one wins in
+these ways:
 
-- **The browser itself, not only the page.** `history`, `bookmarks` and
-  `downloads`; `clipboard`; `arrange` (pin, copy, sleep, move a tab, take it
-  to a window); `extensions` (list, reload); `save_page` (PDF or web
-  archive); a whole-page picture; the text you have selected. Claude in
-  Chrome has none of these, and reaches only the tabs in the group it opens.
-- **A page's own questions.** `dialog` answers an alert, confirm or prompt,
-  which stops a page until someone does; Claude in Chrome has no tool for
-  them and is advised to steer clear of pages that raise them.
-- **Tabs behind the one you look at, and asleep ones.** Clicks, keys and
-  typing are AppKit's own events, handed to the page's view: the page takes
-  them for real ones, your pointer and your window stay where they are, and
-  a frozen tab is woken when an agent reads it.
-- **More for developers**, behind their own switches: a request's headers and
-  bodies with secrets replaced, `storage` (cookies, local and session
-  storage, databases), `inspect` (an element's styles, box and HTML),
-  `performance` (load timings, paints, slowest requests), `block` (keep a
-  tab from loading requests that match), `render` (a tab without its
-  JavaScript, images or styles), `source` (the page as the site sent it),
-  `site_info` (connection, certificate, what was allowed), WebKit's own
-  experimental and debugging `features`, an extension's problems and
-  background console, any user agent, and a hard reload.
-- **Finer say over it.** A switch for each part, a setting per site (read,
-  read only, read and act, never; added before an agent asks), a list of what
-  agents did, one Bypass switch for all of it, and a Stop button on the
-  page's frame.
-- **Nothing to install** in a browser, no account or key, no extension that
-  has to see every page: Backlight's own program is the server, and the
+- **It is your browser.** Your tabs, your sign-ins, your extensions. No second
+  browser to sign in to (the built-in one is a pane of its own, with its own
+  sessions) and no extension to trust with every page (Claude in Chrome
+  needs one, and reaches only the tabs in the group it opens).
+- **Any agent.** The tools are an MCP server: Claude Code, the Claude app,
+  Antigravity or whatever else speaks it. Not tied to one product.
+- **It doesn't take your Mac.** Clicks, keys and typing are AppKit's own events,
+  handed to the page's view: the page takes them for real ones, your pointer
+  and your window stay where they are, tabs behind the one you look at work,
+  and a frozen tab is woken when an agent reads it.
+- **You say site by site, and you see it.** Read, read only, read and act, or
+  never, asked in Backlight when the agent first needs it (or set before it
+  asks); a list of what agents did; the tab it works in framed, with a Stop
+  button; one Bypass switch for all of it. Password, card and one-time-code
+  fields and private tabs never reach it.
+- **The whole browser, not only the page.** `history`, `bookmarks`,
+  `downloads`, `clipboard`, `arrange` (pin, copy, sleep, move a tab, take it to
+  a window), `extensions`, `save_page` (PDF or web archive), the text you have
+  selected, and `dialog` for the alert, confirm or prompt that stops a page
+  until someone answers it. Neither of the others lists tools for these.
+- **Made for the loop of someone building a site.** A page of a local server
+  on a 3G, delayed or offline connection (`throttle`: the same tab, the same
+  address); touch events (`resize` with `touch`); sliders, sortable lists and
+  HTML5 drag and drop (`drag`); `pick`, which tells the agent the selector,
+  the styles that aren't the default's, the React or Vue component an element
+  belongs to, its file and the page's recent errors; `api`, a site's own JSON
+  instead of scraping its page; requests with headers and bodies (secrets
+  replaced), `storage`, `inspect`, `performance`, `block`, `render`, `source`,
+  `site_info`, WebKit's own experimental and debugging `features`.
+- **Fast.** A call returns when the page is quiet, not after a guess; calls
+  that arrive together run together; `batch`; `expect`.
+- **Nothing leaves your Mac from here.** Backlight's own program is the
+  server, over a socket in its folder that only your user can open, and the
   plain build has none of it.
 
-Claude in Chrome is still ahead in these:
+Where Claude's other two are still ahead:
 
-- It works through Chrome's debugger, so it can emulate devices truly (touch,
-  throttled networks, screen metrics); WebKit has no such thing, and
-  `resize` changes the size of the page's frame, the look the page is told of, the zoom
-  and the user agent only.
-- Each of its actions is checked by a classifier of Anthropic's; this has
-  none.
-- It is Chrome: pages built and tested for Chrome, your Chrome profile and
-  its sign-ins, and Anthropic keeps it up to date. It has saved shortcuts and
-  workflows, and can drive several browsers. This is one person's small
-  browser.
-- Dragging that uses the browser's own drag and drop (a file or a link
-  dragged between things) works there and may not here.
+- Claude in Chrome works through Chrome's debugger, so it can emulate a device
+  truly (touch, throttled networks, screen metrics); WebKit has no such thing.
+  Here touch is made by a script (one finger; `@media (pointer: coarse)` in a
+  style sheet is not told), a network limit by the inspector's request
+  interception (a response is held for the time its length would take, so a
+  page doesn't fill in gradually), and the screen's own metrics (its pixel
+  ratio, a notch) can't be set at all: `resize` changes the size of the page's
+  frame, the look the page is told of, the zoom, the user agent and touch.
+- Each of Claude in Chrome's actions is checked by a classifier of
+  Anthropic's; this has none.
+- Claude in Chrome is Chrome: pages built and tested for Chrome, your Chrome
+  profile, and Anthropic keeps it up to date; it has saved shortcuts and
+  workflows and can drive several browsers. The built-in browser belongs to
+  the Claude app, which starts your dev server for it. This is one person's
+  small browser, on WebKit.
+- Dragging with the system's own drag (a file, an image or a link dragged
+  from one place to another, or from one frame into another) works there and
+  may not here; an element with `draggable="true"` in the page's main frame
+  does.
 
 ## Network traffic
 

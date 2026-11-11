@@ -146,7 +146,7 @@ enum AgentTools {
         tool("hover", "Moves the pointer over something, for menus and hints that show then; says what appeared or changed.", [
             "ref": ref, "label": label, "selector": selector, "role": role, "nth": nth, "x": x, "y": y, "picture": picture, "observe": observe,
         ]),
-        tool("drag", "Presses on one place, drags the pointer to another and lets go: sliders, sortable lists, canvases, maps, selecting text. Each end is a ref, a `label` or `selector`, or a position in a screenshot. A page that drags with the browser's own drag and drop (a file or a link dragged between things) may not take it.", [
+        tool("drag", "Presses on one place, drags the pointer to another and lets go: sliders, sortable lists, canvases, maps, selecting text. Each end is a ref, a `label` or `selector`, or a position in a screenshot. Where the page has an element with draggable=\"true\" at the start, it is given its own drag and drop (dragstart, dragenter, dragover, drop, dragend), sent to it as a script would, in the page's main frame; a file, an image or a link dragged with the system's own drag, or from one frame into another, may not be taken.", [
             "ref": ref, "label": label, "selector": selector, "x": x, "y": y, "picture": picture,
             "to_ref": ["type": "integer", "description": "Where to let go: the number of something on the page."],
             "to_label": ["type": "string", "description": "Where to let go: what it says."],
@@ -253,13 +253,14 @@ enum AgentTools {
         tool("record", "Records the tab as a GIF: start, do things, then stop, which saves it into the Downloads folder and says where.", [
             "action": ["type": "string", "enum": ["start", "stop"]],
         ], required: ["action"]),
-        tool("resize", "Changes how the tab's page is shown, for trying a layout: the size the page is shown at (it stands in a frame in the window, which keeps its own size; the page is told that size), the light or dark look, the zoom, and the way the browser introduces itself to sites: a phone's or tablet's, or any user agent you give. Put the page back to fill the window with preset \"desktop\". WebKit has no touch emulation; a page that asks the browser what it is (its user agent) is told after a reload.", [
+        tool("resize", "Changes how the tab's page is shown, for trying a layout: the size the page is shown at (it stands in a frame in the window, which keeps its own size; the page is told that size), the light or dark look, the zoom, and the way the browser introduces itself to sites: a phone's or tablet's, or any user agent you give. Put the page back to fill the window with preset \"desktop\". Touch is made for the page by a script (`touch`): no pointer events of type touch, no multi-touch, and a style sheet's own @media (pointer: coarse) is not told. A page that asks the browser what it is (its user agent) is told after a reload.", [
             "width": ["type": "integer", "description": "The page view's width, in points."],
             "height": ["type": "integer", "description": "The page view's height, in points."],
             "preset": ["type": "string", "enum": ["mobile", "tablet", "desktop"], "description": "mobile (390×844, as an iPhone), tablet (820×1180, as an iPad), desktop (the window's own size back, and the browser's own user agent)."],
             "user_agent": ["type": "string", "description": "The user agent to introduce the tab with (500 characters at most), or \"default\" for the browser's own. It wins over the preset's. Sites are told after a reload."],
             "color_scheme": ["type": "string", "enum": ["light", "dark", "system"], "description": "What the page is told about the person's light or dark setting."],
             "zoom": ["type": "number", "description": "The page's zoom, 1 for actual size (0.3 to 3)."],
+            "touch": ["type": "boolean", "description": "true: the page has touch events (TouchEvent, ontouchstart, maxTouchPoints 5, a coarse pointer for matchMedia) and the agent's clicks and drags make them, as a finger would; false: back to none. The mobile and tablet presets turn it on, desktop off."],
         ]),
         tool("selection", "What the person has handed over from the page: an element they picked with Pick Element for the Agent in its right-click menu (until you have read it), else the text they have selected (or in a field on it, except a password or card field).", reads: true),
         tool("pick", "Asks the person to point at an element of the page: the tab comes to the front, a banner says to click, and the call waits up to a minute. You get the element's selector, role, name, text and HTML, the styles that aren't the default's, the React or Vue components it belongs to (and their file when a development build says), and recent errors. Use it when the person says \"this\" or \"that thing\" and you can't tell which. Esc, or no click, picks nothing.", reads: true),
@@ -291,6 +292,11 @@ enum AgentTools {
         tool("block", "Keeps a tab from loading requests whose address has any of the given words in it (to see the page without a script, or when a service is down); `clear` lifts it. Takes hold for what loads from now on, so reload. Needs the developer tools turned on in Settings › Agents.", [
             "patterns": ["type": "array", "items": ["type": "string"], "description": "Words in an address, up to 20."],
             "clear": ["type": "boolean", "description": "Lift what was blocked in this tab."],
+        ]),
+        tool("throttle", "Puts a slow, delayed or offline connection on a tab, to see how its page loads (its spinners, its timeouts, what shows first): `preset` 3g (about 98 kB/s), dsl (250 kB/s), edge (30 kB/s), offline, or none, or your own `bytes_per_second` and `latency_ms` (delay added to each round trip); what is not given stays as it was. It is the same tab, signed in as it was, at the same address (localhost included), for the requests it makes from now on, so reload to see the page load that way. It is made with the Web Inspector's interception, which holds each request and each response and lets it go after the time the connection would take: a response is held for its Content-Length over the speed (one that says no length, a stream or a chunked page, only for the delay), the bytes then come at once, so a page does not fill in gradually; what is in the cache, in flight already, or a WebSocket is not held. It needs the Web Inspector connected to the tab (about 130 MB while a limit is on; the page can tell it is inspected), and is lifted when you let the tab go. Needs the developer tools turned on in Settings › Agents.", [
+            "preset": ["type": "string", "enum": ["none", "3g", "dsl", "edge", "offline"], "description": "A speed to hold the tab to, offline, or none."],
+            "bytes_per_second": ["type": "integer", "description": "Your own limit on what comes to the page, 1000 to 125000000."],
+            "latency_ms": ["type": "integer", "description": "Added delay for each round trip in milliseconds, 0 to 10000."],
         ]),
         tool("render", "Shows a tab's page without its JavaScript, its images or its styles, to see what it is without them (what works with no script, what the page says without its pictures, how the markup reads unstyled), and reloads it. With nothing asked, says how the tab is. What was switched off is put back when you let the tab go. Needs the developer tools turned on in Settings › Agents.", [
             "javascript": ["type": "boolean", "description": "false: no JavaScript in this tab; true: back on."],
@@ -367,7 +373,7 @@ enum AgentTools {
 
     /// What takes a tab to itself while it runs.
     private static let alone: Set<String> = ["click", "hover", "drag", "type", "key", "scroll", "fill", "fill_form", "search", "navigate", "upload", "dialog",
-                                             "close", "resize", "block", "render", "evaluate", "screenshot", "record", "arrange", "api", "save_page"]
+                                             "close", "resize", "block", "throttle", "render", "evaluate", "screenshot", "record", "arrange", "api", "save_page"]
     /// The tools that are not about one tab.
     private static let tabless: Set<String> = ["tabs", "open", "batch", "history", "bookmarks", "downloads", "clipboard", "extensions", "features", "read_pages", "help", "settle"]
     private static var busy: Set<UUID> = []
@@ -442,6 +448,7 @@ enum AgentTools {
             case "inspect": return try await call.inspect()
             case "performance": return try await call.performance()
             case "block": return try await call.block()
+            case "throttle": return try await call.throttle()
             case "render": return try await call.render()
             case "source": return try await call.source()
             case "site_info": return try await call.siteInfo()
@@ -1405,12 +1412,67 @@ private struct Call {
         guard hypot(to.point.x - from.point.x, to.point.y - from.point.y) >= 1 else { throw Refusal(message: "Both ends are the same place.") }
         let marked = await mark(web)
         try stillOn(tab, site)
+        // The page's own drag and drop (an element with draggable="true"): WebKit starts that drag from the system's
+        // own pointer, which events made here don't feed, so the page is given its drag events instead, in the
+        // order a browser sends them. A page that has none of it gets the pointer as before.
+        let zoom = max(Double(web.pageZoom), 0.1)
+        let events = try? await script(Call.dragAndDrop, ["fx": from.point.x / zoom, "fy": from.point.y / zoom, "tx": to.point.x / zoom, "ty": to.point.y / zoom],
+                                       in: web, timeout: 8) as? String
+        if let events, events != "plain" {
+            AgentRecorder.note(tab)
+            let result = events == "dropped" ? "it took the drop" : "nothing in the page took the drop (no `dragover` there allowed it)"
+            return .text("Dragged from \(from.what) to \(to.what) with the page's own drag and drop, as events sent to the page (\(result))." + (await after(tab, web, observing: marked)))
+        }
         await arming(web, ["mouseup"], count: 1, limit: 3)
         await AgentInput.drag(web, from: from.point, to: to.point, modifiers: modifiers(string("modifiers")))
         await landed(web, limit: 3)
         AgentRecorder.note(tab)
         return .text("Dragged from \(from.what) to \(to.what)." + (await after(tab, web, observing: marked)))
     }
+
+    /// The page's drag and drop, as its own script would see it: for the element at the start (or one around it)
+    /// that has draggable="true". "plain" when there is none, or the page cancels the drag, so that the pointer is used.
+    private static let dragAndDrop = #"""
+    if (typeof DragEvent !== "function" || typeof DataTransfer !== "function") return "plain";
+    const from = { x: fx, y: fy }, to = { x: tx, y: ty };
+    const at = (p) => document.elementFromPoint(p.x, p.y);
+    let source = at(from);
+    while (source && !(source.getAttribute && source.getAttribute("draggable") === "true")) source = source.parentElement;
+    if (!source) return "plain";
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const drag = (type, element, p, data, extra) => {
+      const event = new DragEvent(type, Object.assign({ bubbles: true, cancelable: true, composed: true, view: window, button: 0,
+        clientX: p.x, clientY: p.y, screenX: p.x, screenY: p.y, dataTransfer: data }, extra || {}));
+      element.dispatchEvent(event);
+      return event;
+    };
+    const mouse = (type, element, p) => element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, composed: true, view: window,
+      button: 0, buttons: 1, clientX: p.x, clientY: p.y, screenX: p.x, screenY: p.y }));
+    const data = new DataTransfer();
+    // What comes before a drag starts, for the libraries that arm themselves on the press.
+    if (typeof PointerEvent === "function") source.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, composed: true, view: window,
+      pointerType: "mouse", isPrimary: true, button: 0, buttons: 1, clientX: from.x, clientY: from.y }));
+    mouse("mousedown", source, from);
+    if (drag("dragstart", source, from, data).defaultPrevented) return "plain";
+    await wait(20);
+    let over = null, allowed = false;
+    const steps = 8;
+    for (let i = 1; i <= steps; i++) {
+      const p = { x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps };
+      const element = at(p) || document.body;
+      if (element !== over) {
+        if (over) drag("dragleave", over, p, data, { relatedTarget: element });
+        drag("dragenter", element, p, data, { relatedTarget: over });
+        over = element;
+      }
+      allowed = drag("dragover", element, p, data).defaultPrevented;
+      await wait(16);
+    }
+    if (allowed) drag("drop", over, to, data); else drag("dragleave", over, to, data);
+    await wait(20);
+    drag("dragend", source, to, data);
+    return allowed ? "dropped" : "refused";
+    """#
 
     func type() async throws -> Reply {
         let (tab, web) = try await page(.act)
@@ -2151,7 +2213,13 @@ private struct Call {
             web.pageZoom = min(max(zoom, 0.3), 3)
             said.append("zoom \(String(format: "%g", Double(web.pageZoom)))")
         }
-        guard !said.isEmpty else { throw Refusal(message: "`resize` wants something to change: width and height, preset, user_agent, color_scheme or zoom.") }
+        // A phone or a tablet has a finger, and a desktop none; `touch` says it the other way.
+        let touch = choice("touch") ?? (preset == .desktop ? false : (preset == nil ? nil : true))
+        if let touch, touch != tab.touch {
+            TouchEmulation.set(touch, for: tab)
+            said.append(touch ? "touch is on: the page has touch events, which the agent's clicks and drags make (a reload gives its frames the same)" : "touch is off")
+        }
+        guard !said.isEmpty else { throw Refusal(message: "`resize` wants something to change: width and height, preset, user_agent, color_scheme, zoom or touch.") }
         // The positions of the last screenshot no longer hold.
         tab.agentScale = 1
         AgentRecorder.note(tab)
@@ -2340,6 +2408,49 @@ private struct Call {
         controller.add(list)
         AgentTools.blocking[tab.id] = list
         return .text("Requests with \(patterns.map { "\"\($0)\"" }.joined(separator: ", ")) in their address are blocked in this tab, from now on. Reload the page to see it without them; `block` with clear lifts it.")
+    }
+
+    func throttle() async throws -> Reply {
+        try developer()
+        let (tab, web) = try await page(.act)
+        // Safari's own inspector's: 3G 780 kbit/s, DSL 2 Mbit/s, Edge 240 kbit/s.
+        let presets: [String: Int] = ["3g": 780_000 / 8, "dsl": 2_000_000 / 8, "edge": 240_000 / 8]
+        let name = string("preset")?.lowercased()
+        var change: (InspectorWatch.Limits) -> InspectorWatch.Limits = { $0 }
+        switch name {
+        case nil: break
+        case "none"?: change = { _ in InspectorWatch.Limits() }
+        case "offline"?: change = { var limits = $0; limits.offline = true; return limits }
+        case let name?:
+            guard let speed = presets[name] else { throw Refusal(message: "`preset` is none, 3g, dsl, edge or offline.") }
+            change = { var limits = $0; limits.down = speed; limits.offline = false; return limits }
+        }
+        var speed: Int?, delay: Int?
+        if let own = integer("bytes_per_second") {
+            guard (1_000...125_000_000).contains(own) else { throw Refusal(message: "`bytes_per_second` is from 1000 to 125000000.") }
+            speed = own
+        }
+        if let latency = integer("latency_ms") {
+            guard (0...10_000).contains(latency) else { throw Refusal(message: "`latency_ms` is from 0 to 10000.") }
+            delay = latency
+        }
+        guard name != nil || speed != nil || delay != nil else {
+            throw Refusal(message: "`throttle` wants a `preset` (none, 3g, dsl, edge or offline), or `bytes_per_second` and `latency_ms`.")
+        }
+        guard let watch = await InspectorWatch.attach(to: tab, web) else {
+            throw Refusal(message: "The network can't be limited in this tab: the Web Inspector can't be connected to it (it may be open on the tab, or this WebKit has none).")
+        }
+        var next = change(watch.limits)
+        if let speed { next.down = speed; next.offline = false }
+        if let delay { next.latency = delay }
+        if let problem = await watch.limit(next) { throw Refusal(message: problem) }
+        AgentRecorder.note(tab)
+        guard next.isOn else { return .text("This tab's network is not limited now.") }
+        var parts: [String] = []
+        if next.offline { parts.append("offline") }
+        if next.down > 0 { parts.append(next.down >= 1000 ? "\(next.down / 1000) kB/s" : "\(next.down) B/s") }
+        if next.latency > 0 { parts.append("\(next.latency) ms added to each round trip") }
+        return .text("This tab is held to: \(parts.joined(separator: ", ")), for the requests it makes from now on (reload to see the page load that way; what is cached or in flight is not held). A response is held for its Content-Length over the speed, then comes at once. It stays until `throttle` with preset none, or until you let the tab go.")
     }
 
     func render() async throws -> Reply {

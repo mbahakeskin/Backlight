@@ -15,10 +15,13 @@ struct OmniboxView: View {
         get { _text.wrappedValue }
         nonmutating set { _text.wrappedValue = newValue }
     }
-    private var _chosen = State(initialValue: 0)
+    // The row Enter takes. A class of its own, so that what watches the
+    // pointer holds the thing itself and not a copy of this view's state.
+    private final class Choice: ObservableObject { @Published var index = 0 }
+    @StateObject private var choice = Choice()
     private var chosen: Int {
-        get { _chosen.wrappedValue }
-        nonmutating set { _chosen.wrappedValue = newValue }
+        get { choice.index }
+        nonmutating set { if choice.index != newValue { choice.index = newValue } }
     }
     // The site whose chip is in the field: what is typed searches it.
     private var _chip = State<Keyword?>(initialValue: nil)
@@ -50,10 +53,12 @@ struct OmniboxView: View {
     private final class KeyWatch { var monitor: Any? }
     private var _watch = State(initialValue: KeyWatch())
     @FocusState private var focused: Bool
-    /// When the text last changed: the list is then made again, and a row the
-    /// pointer happens to be resting on is not one it has chosen.
-    private final class Typed { var at = Date.distantPast }
-    private var _typed = State(initialValue: Typed())
+    /// Where the rows are (in the window, from its top left) and the monitor of
+    /// the pointer's moving: the row under a pointer that moves is the one
+    /// chosen. The moves are watched here, not through the view's hover, which
+    /// was not reliable for a view put over the page.
+    private final class Rows { var frames: [Int: CGRect] = [:]; var monitor: Any? }
+    private var _rows = State(initialValue: Rows())
 
     private var privately: Bool {
         shell.asking == .newTab(privately: true) || (shell.asking == .address && shell.selected?.isPrivate == true)
@@ -166,7 +171,6 @@ struct OmniboxView: View {
                             // "claude xyz" is a search of the engine.
                             if chip == nil, chosen != 0, Keywords.exact(old) != nil { plain = true }
                             chosen = 0
-                            _typed.wrappedValue.at = Date()
                             if now.isEmpty { plain = false }
                             // "yt " is the keyword, then a space: its chip.
                             guard chip == nil, !plain, now.count > 1, now.hasSuffix(" "), !now.dropLast().contains(" "),
@@ -186,9 +190,10 @@ struct OmniboxView: View {
                             row(suggestion, chosen: index == chosen)
                                 .contentShape(Rectangle())
                                 // The row under the pointer is the one Enter takes.
-                                .onHover { inside in
-                                    if inside, Date().timeIntervalSince(_typed.wrappedValue.at) > 0.4 { chosen = index }
+                                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                                    _rows.wrappedValue.frames[index] = frame
                                 }
+                                .onDisappear { _rows.wrappedValue.frames[index] = nil }
                                 .onTapGesture { pick(index) }
                         }
                     }
@@ -207,8 +212,19 @@ struct OmniboxView: View {
             if shell.asking == .address, let url = shell.selected?.url { text = url.absoluteString }
             commands = Commands.all(for: window.window) + Commands.extras(for: window)
             focused = true
+            let choice = choice, rows = _rows.wrappedValue, owner = window
+            if let old = rows.monitor { NSEvent.removeMonitor(old) }
+            rows.monitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in
+                guard let content = owner.window?.contentView, event.window === owner.window else { return event }
+                let point = content.convert(event.locationInWindow, from: nil)
+                let y = content.isFlipped ? point.y : content.bounds.height - point.y
+                let hit = rows.frames.first { $0.value.contains(CGPoint(x: point.x, y: y)) }?.key
+                if let hit, hit != choice.index { choice.index = hit }
+                return event
+            }
             // Backspace in an empty field takes the chip off, leaving its
             // keyword to edit.
+            if let old = _watch.wrappedValue.monitor { NSEvent.removeMonitor(old) }
             _watch.wrappedValue.monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.keyCode == 51, event.modifierFlags.isDisjoint(with: [.command, .option, .control]),
                       let chip = self.chip, self.text.isEmpty else { return event }
@@ -221,6 +237,8 @@ struct OmniboxView: View {
         .onDisappear {
             if let monitor = _watch.wrappedValue.monitor { NSEvent.removeMonitor(monitor) }
             _watch.wrappedValue.monitor = nil
+            if let monitor = _rows.wrappedValue.monitor { NSEvent.removeMonitor(monitor) }
+            _rows.wrappedValue.monitor = nil
         }
     }
 

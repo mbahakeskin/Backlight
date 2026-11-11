@@ -359,29 +359,6 @@ in November 2026):
 | Touch events from clicks and drags | yes | — | a preset reports touch points; clicks stay mouse clicks |
 | Used by an agent that is not Claude or ChatGPT | yes | — | — |
 
-Where they are ahead, plainly:
-
-- **They run everywhere Chrome does.** This is macOS 27 on Apple silicon, and
-  one person's small browser.
-- **They are Chrome.** Pages built and tested only for Chrome work there and
-  may not here, and the vendors keep them up to date.
-- **Real device emulation.** Claude in Chrome works through Chrome's debugger
-  and can emulate a device truly (touch, throttled networks, screen metrics);
-  WebKit has no such thing. Here touch is made by a script (one finger;
-  `@media (pointer: coarse)` in a style sheet is not told), a network limit by
-  the inspector's request interception (a response is held for the time its
-  length would take, so a page doesn't fill in gradually), and the screen's
-  own pixel ratio can't be set.
-- **Their makers' safety work.** Each of Claude in Chrome's actions is checked
-  by a classifier of Anthropic's; this has none.
-- **More around the browser.** Claude in Chrome has saved shortcuts and
-  workflows and can drive several browsers; Claude's built-in browser belongs to
-  the app that starts your dev server for it; ChatGPT has a cloud browser and a
-  work mode.
-- **The system's own drag.** A file, an image or a link dragged from one place
-  to another, or from one frame into another, works there and may not here; an
-  element with `draggable="true"` in the page's main frame does.
-
 ## Agents
 
 Anthropic's own extension, Claude in Chrome, drives pages through Chrome's

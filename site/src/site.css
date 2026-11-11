@@ -356,3 +356,9 @@ html.twin .hero, html.twin .stage-sec { background: transparent; }
 html.twin .stage-sec::after { opacity: 1; }
 html.twin .stage-sec::before { opacity: 0; }
 .stage-sec::before { transition: opacity .9s var(--ease); }
+
+/* Why this one: the agent points in two columns, one on a narrow screen. */
+.why .lede { max-width: 62ch; }
+.why .agent-points { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px clamp(28px, 5vw, 72px); }
+.why .honest { margin-top: 56px; }
+@media (max-width: 760px) { .why .agent-points { grid-template-columns: 1fr; } }

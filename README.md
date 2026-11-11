@@ -249,17 +249,92 @@ with the agent tools).
 the app's permissions (location, camera, microphone) from build to build;
 otherwise it signs ad hoc, and macOS asks again after each build.
 
+## Why this, and not Claude's browser, Claude in Chrome or ChatGPT's extension
+
+What an agent can drive today, in one line each (as their makers describe them,
+November 2026):
+
+- **Claude's built-in browser:** a browser pane inside the Claude app, apart
+  from your own browser, with sessions of its own; Claude drives it.
+- **Claude in Chrome:** Anthropic's extension for desktop Google Chrome, in beta
+  on the paid plans; Claude drives it through Chrome's debugger. Per site you
+  approve what it may do ([permissions](https://support.claude.com/en/articles/12902446-claude-in-chrome-permissions-guide)),
+  and sites in high-risk categories such as financial services are closed to
+  it ([Anthropic](https://www.anthropic.com/news/claude-for-chrome)).
+- **ChatGPT's extension:** OpenAI retired its Atlas browser in July 2026 and
+  points to the ChatGPT extension for Chrome, Edge, Brave, Opera and Vivaldi;
+  since October it can read and operate your open tabs, and the fuller agent
+  work is in the ChatGPT app and its cloud browser
+  ([TechCrunch](https://techcrunch.com/2026/07/09/openai-is-shutting-down-atlas-but-its-ai-browser-ambitions-are-still-growing/),
+  [9to5Google](https://9to5google.com/2026/10/16/chatgpt-gets-deeper-google-chrome-integration-including-control-over-tabs/)).
+
+What this has that none of them has:
+
+- **Any agent, not one company's.** The tools are an MCP server. Claude Code,
+  the Claude app, Antigravity, or whatever else speaks MCP, and the model you
+  already pay for; each of the three above works with its own assistant only.
+- **WebKit.** The engine of Safari and of every browser on an iPhone or iPad.
+  The extensions above run in Chrome and its cousins, so what an agent tests
+  there is Blink. For a site that has to work on an iPhone, this is the one
+  that tests it in the engine it will meet.
+- **Your own browser, with nothing to install in it.** Your tabs and sign-ins,
+  no second browser to sign in to (Claude's built-in one has its own
+  sessions), no extension that has to see every page.
+- **Local sites, as a person building them works.** A local server's page on a
+  3G, delayed or offline connection in the same tab (`throttle`), touch
+  events (`resize` with `touch`), sliders and HTML5 drag and drop (`drag`),
+  `pick` (the selector, the styles that aren't the default's, the React or Vue
+  component an element belongs to, its file, the page's recent errors),
+  `api` (a site's own JSON instead of scraping its page), requests with
+  their headers and bodies (secrets replaced), `storage`, `inspect`,
+  `performance`, `block`, `render`, `source`, WebKit's own experimental and
+  debugging `features`.
+- **The whole browser, not only the page.** `history`, `bookmarks`,
+  `downloads`, `clipboard`, `arrange`, `extensions`, `save_page` (PDF or web
+  archive), the text you have selected, and `dialog` for the alert, confirm or
+  prompt that stops a page until someone answers it. Claude in Chrome's list
+  has none of these.
+- **No site is closed to it, and none is open until you say.** Read, read
+  only, read and act, or never, per site, asked in Backlight when the agent
+  first needs it (or set before it asks); a list of what agents did; the tab it
+  works in framed, with a Stop button; one Bypass switch. Password, card and
+  one-time-code fields and private tabs never reach it.
+- **Nothing of Backlight's own on a server.** No account, no subscription, no
+  telemetry; its program is the server, over a socket only your user can open.
+  MIT licence, and the plain build has none of it.
+
+Where they are ahead, plainly:
+
+- **They run everywhere Chrome does.** This is macOS 27 on Apple silicon, and
+  one person's small browser.
+- **They are Chrome.** Pages built and tested only for Chrome work there and
+  may not here, and the vendors keep them up to date.
+- **Real device emulation.** Claude in Chrome works through Chrome's debugger
+  and can emulate a device truly (touch, throttled networks, screen metrics);
+  WebKit has no such thing. Here touch is made by a script (one finger;
+  `@media (pointer: coarse)` in a style sheet is not told), a network limit by
+  the inspector's request interception (a response is held for the time its
+  length would take, so a page doesn't fill in gradually), and the screen's
+  own pixel ratio can't be set.
+- **Their makers' safety work.** Each of Claude in Chrome's actions is checked
+  by a classifier of Anthropic's; this has none.
+- **More around the browser.** Claude in Chrome has saved shortcuts and
+  workflows and can drive several browsers; Claude's built-in browser belongs to
+  the app that starts your dev server for it; ChatGPT has a cloud browser and a
+  work mode.
+- **The system's own drag.** A file, an image or a link dragged from one place
+  to another, or from one frame into another, works there and may not here; an
+  element with `draggable="true"` in the page's main frame does.
+
 ## Agents
 
-**A browser an agent can drive without taking it over.** Whichever agent you
-already use (Claude Code, the Claude app, Antigravity, any MCP client) gets 50
-tools for your real tabs, signed in as you, and you say site by site what it
-may do. No extension, no key, no account of its own, and Backlight itself
-talks to no server. It does what Anthropic's Claude in Chrome does through
-Chrome's debugger, which WebKit's extensions don't have, with tools of its own
-over the Model Context Protocol, and more of what a person building a site
-needs: a local server's page on a slow connection, touch events, drag and
-drop, the component an element belongs to.
+Anthropic's own extension, Claude in Chrome, drives pages through Chrome's
+debugger, which WebKit's extensions don't have. Backlight offers the same
+things itself, as 50 tools over the Model Context Protocol, with no key and no
+account of its own: whichever agent you already use calls them (Claude Code,
+the Claude app, Antigravity, or any other MCP client). Why you might want that
+rather than Claude's own browser, Claude in Chrome or ChatGPT's extension is
+the section before this one.
 
 It is in the build only when asked for: `./build.sh agent`, which is also what
 a release is (from 0.6.0 on, a release has this build alone). The plain build,
@@ -535,71 +610,6 @@ does not have. Keep it to sites you trust.
 
 A frame from another site is reached by the picture and by position only:
 its text and fields aren't listed.
-
-### Against Claude's built-in browser and Claude in Chrome
-
-Claude reaches a browser in three ways: its own built-in browser (a pane in
-the Claude app, a browser apart from yours), Claude in Chrome (an extension in
-your Chrome), and this (your Backlight, over MCP). Compared by the tools each
-has (the other two's from their own lists, in November 2026), this one wins in
-these ways:
-
-- **It is your browser.** Your tabs, your sign-ins, your extensions. No second
-  browser to sign in to (the built-in one is a pane of its own, with its own
-  sessions) and no extension to trust with every page (Claude in Chrome
-  needs one, and reaches only the tabs in the group it opens).
-- **Any agent.** The tools are an MCP server: Claude Code, the Claude app,
-  Antigravity or whatever else speaks it. Not tied to one product.
-- **It doesn't take your Mac.** Clicks, keys and typing are AppKit's own events,
-  handed to the page's view: the page takes them for real ones, your pointer
-  and your window stay where they are, tabs behind the one you look at work,
-  and a frozen tab is woken when an agent reads it.
-- **You say site by site, and you see it.** Read, read only, read and act, or
-  never, asked in Backlight when the agent first needs it (or set before it
-  asks); a list of what agents did; the tab it works in framed, with a Stop
-  button; one Bypass switch for all of it. Password, card and one-time-code
-  fields and private tabs never reach it.
-- **The whole browser, not only the page.** `history`, `bookmarks`,
-  `downloads`, `clipboard`, `arrange` (pin, copy, sleep, move a tab, take it to
-  a window), `extensions`, `save_page` (PDF or web archive), the text you have
-  selected, and `dialog` for the alert, confirm or prompt that stops a page
-  until someone answers it. Neither of the others lists tools for these.
-- **Made for the loop of someone building a site.** A page of a local server
-  on a 3G, delayed or offline connection (`throttle`: the same tab, the same
-  address); touch events (`resize` with `touch`); sliders, sortable lists and
-  HTML5 drag and drop (`drag`); `pick`, which tells the agent the selector,
-  the styles that aren't the default's, the React or Vue component an element
-  belongs to, its file and the page's recent errors; `api`, a site's own JSON
-  instead of scraping its page; requests with headers and bodies (secrets
-  replaced), `storage`, `inspect`, `performance`, `block`, `render`, `source`,
-  `site_info`, WebKit's own experimental and debugging `features`.
-- **Fast.** A call returns when the page is quiet, not after a guess; calls
-  that arrive together run together; `batch`; `expect`.
-- **Nothing leaves your Mac from here.** Backlight's own program is the
-  server, over a socket in its folder that only your user can open, and the
-  plain build has none of it.
-
-Where Claude's other two are still ahead:
-
-- Claude in Chrome works through Chrome's debugger, so it can emulate a device
-  truly (touch, throttled networks, screen metrics); WebKit has no such thing.
-  Here touch is made by a script (one finger; `@media (pointer: coarse)` in a
-  style sheet is not told), a network limit by the inspector's request
-  interception (a response is held for the time its length would take, so a
-  page doesn't fill in gradually), and the screen's own metrics (its pixel
-  ratio, a notch) can't be set at all: `resize` changes the size of the page's
-  frame, the look the page is told of, the zoom, the user agent and touch.
-- Each of Claude in Chrome's actions is checked by a classifier of
-  Anthropic's; this has none.
-- Claude in Chrome is Chrome: pages built and tested for Chrome, your Chrome
-  profile, and Anthropic keeps it up to date; it has saved shortcuts and
-  workflows and can drive several browsers. The built-in browser belongs to
-  the Claude app, which starts your dev server for it. This is one person's
-  small browser, on WebKit.
-- Dragging with the system's own drag (a file, an image or a link dragged
-  from one place to another, or from one frame into another) works there and
-  may not here; an element with `draggable="true"` in the page's main frame
-  does.
 
 ## Network traffic
 

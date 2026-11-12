@@ -308,7 +308,10 @@ What this one is, and each is measured or listed further down, under Agents:
   bodies (secrets replaced), WebKit's own experimental and debugging
   `features`. And for a page on localhost as much as any: a slow, delayed or
   offline connection in the same tab (`throttle`), touch events (`resize` with
-  `touch`), sliders and HTML5 drag and drop (`drag`).
+  `touch`), sliders and HTML5 drag and drop (`drag`). Backlight starts no
+  program itself (a browser that could would hand a page's words more power);
+  the agent that drives it has a shell of its own, starts your dev server with
+  that, and opens the address here.
 - **Yours to allow, to watch and to stop.** Off until you turn it on. Per
   site, once to read and once to click and type (or read only, or never), asked
   in Backlight when the agent first needs it, or set before it asks; Settings
@@ -346,8 +349,6 @@ in November 2026):
 | Batch several calls | yes (`optional`, `repeat`, `expect`) | yes | yes |
 | Resize the page | yes | yes | yes |
 | Upload files, record a GIF | yes | yes | — |
-| Start your dev server and show it | — | — | yes |
-| Drive several browsers | — | yes | — |
 | Read many pages in one call, a page's own JSON, the products a page declares | yes | — | — |
 | Pick an element for the agent (component, file, errors) | yes | — | — |
 | History, bookmarks, downloads, clipboard | yes | — | — |

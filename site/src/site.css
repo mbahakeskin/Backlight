@@ -357,12 +357,6 @@ html.twin .stage-sec::after { opacity: 1; }
 html.twin .stage-sec::before { opacity: 0; }
 .stage-sec::before { transition: opacity .9s var(--ease); }
 
-/* Why this one: the agent points in two columns, one on a narrow screen. */
-.why .lede { max-width: 62ch; }
-.why .agent-points { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px clamp(28px, 5vw, 72px); }
-.why .honest { margin-top: 56px; }
-@media (max-width: 760px) { .why .agent-points { grid-template-columns: 1fr; } }
-
 .cmp { margin-top: 56px; }
 .cmp h3 { font-size: 1.05rem; margin-bottom: 14px; }
 .cmp-wrap { overflow-x: auto; border: 1px solid var(--line, rgba(128,128,128,.25)); border-radius: 14px; }
@@ -375,4 +369,3 @@ html.twin .stage-sec::before { opacity: 0; }
 .cmp td.y { color: var(--brand-ink, inherit); font-weight: 600; }
 .cmp td.n { opacity: .5; }
 .cmp-note { margin-top: 12px; font-size: .85rem; opacity: .7; max-width: 70ch; }
-.why .honest li b { margin-right: .45em; }

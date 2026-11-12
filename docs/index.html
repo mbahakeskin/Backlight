@@ -373,12 +373,6 @@ html.twin .stage-sec::after { opacity: 1; }
 html.twin .stage-sec::before { opacity: 0; }
 .stage-sec::before { transition: opacity .9s var(--ease); }
 
-/* Why this one: the agent points in two columns, one on a narrow screen. */
-.why .lede { max-width: 62ch; }
-.why .agent-points { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px clamp(28px, 5vw, 72px); }
-.why .honest { margin-top: 56px; }
-@media (max-width: 760px) { .why .agent-points { grid-template-columns: 1fr; } }
-
 .cmp { margin-top: 56px; }
 .cmp h3 { font-size: 1.05rem; margin-bottom: 14px; }
 .cmp-wrap { overflow-x: auto; border: 1px solid var(--line, rgba(128,128,128,.25)); border-radius: 14px; }
@@ -391,7 +385,6 @@ html.twin .stage-sec::before { opacity: 0; }
 .cmp td.y { color: var(--brand-ink, inherit); font-weight: 600; }
 .cmp td.n { opacity: .5; }
 .cmp-note { margin-top: 12px; font-size: .85rem; opacity: .7; max-width: 70ch; }
-.why .honest li b { margin-right: .45em; }
 
 /* ---------- The laptop: a 13.6" MacBook Air, measured off the real screen (1710 x 1112 pt, notch 208 x 37.5) ---------- */
 .laptop { --k: .7; position: relative; width: 100%; }
@@ -880,20 +873,7 @@ html.twin .stage-sec::before { opacity: 0; }
         <span>tabs</span><span>open</span><span>read_text</span><span>read_page</span><span>find</span><span>click</span><span>type</span><span>fill_form</span><span>search</span><span>read_pages</span><span>screenshot</span><span>dialog</span><span>wait</span><span>pick</span><span>save_page</span><span>record</span><span>arrange</span><span>history</span><span>bookmarks</span><span>downloads</span><span class="dev">console</span><span class="dev">network</span><span class="dev">api</span><span class="dev">inspect</span><span class="dev">storage</span><span class="dev">performance</span><span class="dev">features</span>
       </div>
     </div>
-  </section>
-
-  <section class="sec why" id="why" aria-labelledby="wh">
     <div class="wrap">
-      <h2 id="wh" class="reveal">Why not the agent browsers <span class="n">you already have?</span></h2>
-      <p class="lede reveal">Claude has a browser of its own and Claude in Chrome. OpenAI retired Atlas and now has an extension for Chrome and its cousins. Each is made for one assistant. This one is made for whichever you use.</p>
-      <ul class="agent-points reveal">
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 3h6"/></svg></span><div><h3>Fewer turns, less waiting</h3><p>Every click comes back with what it changed. Things are named by what they say, and a form, a search or 25 pages are one call each. Nothing waits on a guess: a click takes 0.04 s.</p></div></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/></svg></span><div><h3>Reads a page the way an agent needs</h3><p>Long pages in windows that say what they hold, a page's own JSON, the products it declares, and Pick: you point, and it gets the selector, the styles, the React or Vue component and its file.</p></div></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg></span><div><h3>The whole browser, and the developer's tools</h3><p>History, bookmarks, downloads, the clipboard, tabs and windows, cookies and storage, styles, timings, page source, and a localhost page on a 3G or offline connection.</p></div></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><div><h3>Yours to allow, watch and stop</h3><p>Per site, asked in Backlight. The tab it works in is framed, with a Stop button, and a list says what it did. Password and card fields are never given: rules of the program, not a model's judgement.</p></div></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="m7 7 3 3m7-3-3 3m-7 8 3-3m7 3-3-3"/></svg></span><div><h3>Any agent, connected in a click</h3><p>It is an MCP server: Claude Code, the Claude app, Antigravity, any other. Settings connects each and writes the skill that saves turns. The others work with their own assistant only.</p></div></li>
-          <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></svg></span><div><h3>Your browser, on WebKit</h3><p>Your tabs, sign-ins and extensions, nothing installed in your browser. WebKit is the engine of Safari and of every iPhone browser; the extensions test in Blink. MIT licence, no account.</p></div></li>
-      </ul>
       <div class="cmp reveal">
         <h3>What each lists to its agent</h3>
         <div class="cmp-wrap"><table>
@@ -914,6 +894,9 @@ html.twin .stage-sec::before { opacity: 0; }
       </div>
     </div>
   </section>
+
+  
+
 
 
   <section class="sec" id="features" aria-labelledby="fh">

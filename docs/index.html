@@ -205,27 +205,7 @@ section { position: relative; }
 @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } .hero h1 .l > span { animation: none; transform: none; } .hero-sub, .cta, .meta { animation: none; opacity: 1; } html { scroll-behavior: auto; } }
 
 /* What it does: an index, not a grid of cards */
-.index-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px 48px; align-items: end; }
-.finder { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 48px; width: min(380px, 100%); border-radius: 14px; background: var(--paper-2); border: 1px solid transparent; }
-.finder:focus-within { border-color: var(--brand); }
-.finder svg { width: 18px; height: 18px; color: var(--ink-2); flex: none; }
-.finder input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 1rem; outline: none; }
-.finder input::placeholder { color: var(--ink-2); }
-.groups-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 36px; }
-.groups-nav button { border: 1px solid var(--line); background: none; padding: 7px 14px; border-radius: 999px; font-size: .9rem; font-weight: 550; color: var(--ink-2); transition: all .2s; }
-.groups-nav button:hover { color: var(--ink); background: var(--paper-2); }
-.groups-nav button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.fgroup { display: grid; grid-template-columns: minmax(180px, 280px) 1fr; gap: 12px clamp(24px, 5vw, 80px); padding: 44px 0; border-top: 1px solid var(--line); }
-.fgroup:first-of-type { margin-top: 40px; }
-.fgroup h3 { font-size: 1.5rem; line-height: 1.15; letter-spacing: -.02em; font-weight: 680; position: sticky; top: 92px; align-self: start; }
-.fgroup h3 small { display: block; margin-top: 8px; font-size: .9375rem; font-weight: 400; letter-spacing: 0; color: var(--ink-2); line-height: 1.45; }
-.frows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px clamp(24px, 4vw, 56px); }
-.frow h4 { font-size: 1.0625rem; font-weight: 640; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 10px; }
-.frow h4 kbd { font-size: .72rem; font-weight: 500; }
-.frow p { color: var(--ink-2); font-size: 1rem; line-height: 1.55; margin-top: 4px; text-wrap: pretty; }
-.frow[hidden], .fgroup[hidden] { display: none; }
 .none { padding: 40px 0; color: var(--ink-2); }
-@media (max-width: 820px) { .fgroup { grid-template-columns: 1fr; } .fgroup h3 { position: static; } .frows { grid-template-columns: 1fr; } .index-head { grid-template-columns: 1fr; } }
 
 /* Numbers */
 .numbers { background: var(--inv); color: oklch(.97 .006 var(--h)); --on-brand: oklch(.97 .006 var(--h)); --on-brand-dim: oklch(.97 .006 var(--h) / .66); --brand: oklch(.82 calc(var(--c) * .85) var(--h)); overflow: clip; }
@@ -385,6 +365,21 @@ html.twin .stage-sec::before { opacity: 0; }
 .cmp td.y { color: var(--brand-ink, inherit); font-weight: 600; }
 .cmp td.n { opacity: .5; }
 .cmp-note { margin-top: 12px; font-size: .85rem; opacity: .7; max-width: 70ch; }
+
+.hl-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 36px 32px; margin-top: 48px; }
+.hl h3 { font-size: 1.125rem; line-height: 1.25; letter-spacing: -.01em; font-weight: 650; }
+.hl p { color: var(--ink-2); font-size: 1rem; line-height: 1.55; margin-top: 8px; text-wrap: pretty; }
+.hl-more { margin-top: 40px; }
+.hl-more a { color: var(--ink); font-weight: 600; text-decoration: none; border-bottom: 1.5px solid var(--line); padding-bottom: 2px; }
+.hl-more a:hover { border-color: var(--brand); }
+@media (max-width: 980px) { .hl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .hl-grid { grid-template-columns: 1fr; gap: 28px; } }
+.install { margin-top: 6px; }
+.install .copy { display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px; border: 1px solid var(--line); border-radius: 14px; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: background .2s, border-color .2s; }
+.install .copy:hover { background: var(--paper-2); border-color: var(--ink-2); }
+.install .copy svg { width: 22px; height: 22px; flex: none; color: var(--ink-2); }
+.install .copy span { font-weight: 600; font-size: .9375rem; }
+.install .copy small { display: block; font-weight: 450; font-size: .8125rem; color: var(--ink-2); margin-top: 1px; }
 
 /* ---------- The laptop: a 13.6" MacBook Air, measured off the real screen (1710 x 1112 pt, notch 208 x 37.5) ---------- */
 .laptop { --k: .7; position: relative; width: 100%; }
@@ -753,11 +748,14 @@ html.twin .stage-sec::before { opacity: 0; }
       <div class="hero-row">
         <p class="hero-sub"><b data-name>Backlight</b> is a small web browser for Mac. Tabs wait at the left edge and the address at the top, and neither takes room until you reach for it. It is written in Swift on the WebKit that ships with macOS, and your AI agent can use it too.</p>
         <div class="cta">
-          <a class="btn" href="https://github.com/mbahakeskin/Backlight/releases/latest">
+          <a class="btn" href="https://github.com/mbahakeskin/Backlight/releases/download/v0.9.5/Backlight-0.9.5.zip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
             <span>Download for Mac<small>Version 0.9.5 · 2.1 MB</small></span>
           </a>
           <a class="btn-quiet" href="https://github.com/mbahakeskin/Backlight">View on GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="install" data-install>
+          <button type="button" class="copy" data-copy="curl -s https://api.github.com/repos/mbahakeskin/Backlight/releases/latest | grep -o 'https://[^&quot;]*\.zip' | xargs curl -sL -o /tmp/Backlight.zip &amp;&amp; unzip -q -o /tmp/Backlight.zip -d /Applications &amp;&amp; open /Applications/Backlight.app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 4 4-4 4"/><path d="M12 17h7"/><rect x="2.5" y="4" width="19" height="16" rx="3"/></svg><span>Or install from Terminal<small>Copy the command. macOS shows no “cannot check this app” warning for it.</small></span></button>
         </div>
         <p class="meta">Free and open source (MIT) · macOS 27 · No account, no telemetry</p>
       </div>
@@ -901,88 +899,18 @@ html.twin .stage-sec::before { opacity: 0; }
 
   <section class="sec" id="features" aria-labelledby="fh">
     <div class="wrap">
-      <div class="index-head reveal">
-        <div>
-          <h2 id="fh">Small, but it <span class="w">does</span> a lot.</h2>
-          <p class="lede">All of it is in the app today. Search, or pick a part.</p>
-        </div>
-        <label class="finder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><span class="sr">Search the features</span><input id="finder" type="search" placeholder="Search the features" autocomplete="off"></label>
+      <h2 id="fh" class="reveal">Small, but it <span class="w">does</span> a lot.</h2>
+      <div class="hl-grid reveal">
+        <div class="hl"><h3>The page takes the whole window</h3><p>Tabs in a sidebar, the address in a top bar. Both slide in at their edge, and either can stay pinned.</p></div>
+        <div class="hl"><h3>Tabs, groups, profiles, split view</h3><p>Profiles keep their own sign-ins. Tabs off screen are frozen, and unloaded after a while.</p></div>
+        <div class="hl"><h3>Reader, dark pages, Peek</h3><p>Just the article; dark colours for white pages; a link's page in a panel over the one you are reading.</p></div>
+        <div class="hl"><h3>Picture in picture, downloads</h3><p>A video in its own window. Downloads you can pause, and a button for photos and videos on the sites you list.</p></div>
+        <div class="hl"><h3>Private by build</h3><p>No telemetry, no account. Ads and trackers blocked by uBlock Origin Lite, tracking parameters cut from links.</p></div>
+        <div class="hl"><h3>Chrome extensions</h3><p>From the Chrome Web Store, a folder or a Safari app. Bitwarden works, Touch ID included.</p></div>
+        <div class="hl"><h3>Translate on this Mac</h3><p>The system's own translation, text by text in the page, and back with one press.</p></div>
+        <div class="hl"><h3>For developers</h3><p>Develop and Debug menus as in Safari, any user agent or size, settings kept per site.</p></div>
       </div>
-      <div class="groups-nav" id="gnav" role="group" aria-label="Parts"></div>
-      <div id="findex">
-      <div class="fgroup reveal" id="f-edges" data-group="edges" data-title="Windows and edges">
-        <h3>Windows and edges</h3>
-        <div class="frows">
-          <div class="frow"><h4>The page takes the whole window</h4><p>Tabs sit in a sidebar and the address in a top bar. Both slide in when the pointer reaches their edge, and either can be pinned open.</p></div>
-          <div class="frow"><h4>Sidebar only</h4><p>Settings can drop the top bar. The sidebar then holds back, forward, the site and its buttons. A new install starts this way.</p></div>
-          <div class="frow"><h4>Full screen</h4><p>On a Mac with a notch the top bar runs around it. The menu bar and the Dock stay hidden until you press against the edge.</p></div>
-          <div class="frow"><h4>A new tab is a field</h4><p>It opens over the page you are on, and the tab exists once you enter something. It suggests tabs, bookmarks and history, and matches letters in order (“gthub”) or two initials (“gh bl”).</p></div>
-          <div class="frow"><h4>Keywords and commands</h4><p>Type a site's keyword and a space (“yt lofi”) to search it. Start with &gt; to run any menu command.</p></div>
-        </div>
-      </div>
-      <div class="fgroup reveal" id="f-tabs" data-group="tabs" data-title="Tabs, groups and profiles">
-        <h3>Tabs, groups and profiles</h3>
-        <div class="frows">
-          <div class="frow"><h4>Pinned tabs</h4><p>Three to a row, as tiles above the rest.</p></div>
-          <div class="frow"><h4>Tab groups</h4><p>A coloured name that folds, with a line of that colour down its tabs. Right-click a tab to add it.</p></div>
-          <div class="frow"><h4>Tabs stay under their parent</h4><p>A tab opened from a link sits under its source, and closing it takes you back there.</p></div>
-          <div class="frow"><h4>Profiles</h4><p>Coloured dots above the pinned tabs. Each profile has its own cookies, sign-ins, tabs, history and bookmarks. Extensions, zoom and site permissions are shared.</p></div>
-          <div class="frow"><h4>Split view</h4><p>Right-click a tab or link and choose Open Side by Side. Drag the divider; the framed half has the keyboard.</p></div>
-          <div class="frow"><h4>Private tabs</h4><p>They share one cookie jar kept in memory, which goes when the app quits. They are never saved and never shown to an agent.</p></div>
-          <div class="frow"><h4>Quiet tabs</h4><p>A tab off screen is frozen, and unloaded after six hours or when memory runs short. A tab with unsent typing, sound or a call is left alone.</p></div>
-        </div>
-      </div>
-      <div class="fgroup reveal" id="f-reading" data-group="reading" data-title="Reading and looking">
-        <h3>Reading and looking</h3>
-        <div class="frows">
-          <div class="frow"><h4>Reader <kbd>⌥⌘R</kbd></h4><p>Just the article, in light, sepia or dark, serif or sans, in five sizes.</p></div>
-          <div class="frow"><h4>Dark pages <kbd>⇧⌘D</kbd></h4><p>A page that stays white while macOS is dark gets dark colours, pictures untouched. Off until you turn it on.</p></div>
-          <div class="frow"><h4>Peek <kbd>⇧ click</kbd></h4><p>A link's page in a panel over the one you are reading; Esc puts it away. Hold ⌘ over a link for a smaller preview.</p></div>
-          <div class="frow"><h4>Translate Page</h4><p>The system's own translation, done on this Mac.</p></div>
-          <div class="frow"><h4>Zoom, by site <kbd>⌘+ ⌘−</kbd></h4><p>Set once and remembered for the site, except in private tabs.</p></div>
-          <div class="frow"><h4>Picture in picture <kbd>⇧⌘P</kbd></h4><p>Just the video, in a window you can resize. A playing video goes there by itself when you leave its tab.</p></div>
-          <div class="frow"><h4>The page as one picture <kbd>⇧⌘R</kbd></h4><p>Copies the whole page, top to bottom, as a single image.</p></div>
-          <div class="frow"><h4>Pick Color from Screen</h4><p>In the View menu: macOS's eyedropper, with the color's code copied to the clipboard.</p></div>
-        </div>
-      </div>
-      <div class="fgroup reveal" id="f-saving" data-group="saving" data-title="Saving">
-        <h3>Saving</h3>
-        <div class="frows">
-          <div class="frow"><h4>A download button for photos and videos</h4><p>On the sites you list, a small button appears over a large photo or video. The list starts empty.</p></div>
-          <div class="frow"><h4>Videos sent in pieces</h4><p>A video the page loads in pieces is joined into one mp4: an HLS playlist (AES-128 included), or a picture file and a sound file.</p></div>
-          <div class="frow"><h4>Downloads you can steer</h4><p>Pause, resume, cancel and restart, with speed and time left. Paused ones and the last hundred finished survive quitting.</p></div>
-          <div class="frow"><h4>Copy address without the tracking <kbd>⇧⌘C</kbd></h4><p>Removes utm_, fbclid, gclid and share codes, but never a video's t or a search's q. ⌥⇧⌘C copies the address as it is.</p></div>
-          <div class="frow"><h4>Import</h4><p>Bookmarks and history from Chrome and its kin, Safari and Firefox, and a password file (CSV) from Chrome and its kin.</p></div>
-        </div>
-      </div>
-      <div class="fgroup reveal" id="f-privacy" data-group="privacy" data-title="Privacy and the network">
-        <h3>Privacy and the network</h3>
-        <div class="frows">
-          <div class="frow"><h4>No telemetry, no account</h4><p>Only the pages you open, plus a daily check for a newer version that Settings turns off.</p></div>
-          <div class="frow"><h4>Ads and trackers</h4><p>Blocked by uBlock Origin Lite, the Safari extension from the App Store, YouTube's ads included.</p></div>
-          <div class="frow"><h4>Tracking parameters</h4><p>Links you follow lose fbclid, gclid and the like, using the list macOS keeps for Safari.</p></div>
-          <div class="frow"><h4>What a site may do</h4><p>The lock shows how the page was fetched, what it may do (location, notifications), what it stores here and its zoom.</p></div>
-          <div class="frow"><h4>Google keeps your region</h4><p>Searches carry the Mac's language and region, so a VPN doesn't switch the results.</p></div>
-        </div>
-      </div>
-      <div class="fgroup reveal" id="f-ext" data-group="ext" data-title="Extensions">
-        <h3>Extensions</h3>
-        <div class="frows">
-          <div class="frow"><h4>Chrome Web Store, folders, Safari</h4><p>Install from the Chrome Web Store (signature checked), an unpacked folder, or a Safari extension inside its app. One set serves every profile.</p></div>
-          <div class="frow"><h4>Talks to Mac apps</h4><p>Bitwarden's Touch ID through its desktop app works.</p></div>
-        </div>
-      </div>
-      <div class="fgroup reveal" id="f-dev" data-group="dev" data-title="For developers">
-        <h3>For developers</h3>
-        <div class="frows">
-          <div class="frow"><h4>Develop and Debug menus</h4><p>As in Safari: Web Inspector, console, page source, timelines and WebKit's experimental features.</p></div>
-          <div class="frow"><h4>Settings kept per site</h4><p>A site's user agent, color scheme and switches (JavaScript, images, styles) are saved and applied when you visit it.</p></div>
-          <div class="frow"><h4>Any user agent, any size</h4><p>iPhone, iPad, Chrome, Firefox or your own, at phone, tablet or typed-in sizes.</p></div>
-          <div class="frow"><h4>Pick Element for the Agent</h4><p>Point at an element and the agent gets its selector, text, HTML, styles, framework components and the page's recent errors.</p></div>
-        </div>
-      </div>
-      </div>
-      <p class="none" id="none" hidden>Nothing here by that name. <button type="button" id="clearFind" style="background:none;border:0;color:var(--brand);font-weight:600;padding:0;text-decoration:underline">Show everything</button></p>
+      <p class="hl-more reveal"><a href="https://github.com/mbahakeskin/Backlight/blob/main/FEATURES.md">Everything it does, one line each <span aria-hidden="true">↗</span></a></p>
     </div>
   </section>
 
@@ -1038,38 +966,7 @@ html.twin .stage-sec::before { opacity: 0; }
         </div>
       </div>
 
-      <dl class="ledger reveal" style="margin:72px 0 0; display:grid; gap:0">
-        <div style="display:grid;grid-template-columns:minmax(150px,300px) 1fr;gap:8px 32px;align-items:baseline;padding:22px 0;border-top:1px solid oklch(.985 .012 var(--h) / .2)"><dt style="font-size:clamp(2.2rem,5vw,4rem);font-weight:700;letter-spacing:-.035em;font-stretch:88%;font-variant-numeric:tabular-nums;line-height:1">2.0 MB</dt><dd style="font-size:1.0625rem;max-width:62ch"><b style="font-weight:650">The download.</b> <span style="color:var(--on-brand-dim)">A zip with the agent tools in it.</span></dd></div>
-        <div style="display:grid;grid-template-columns:minmax(150px,300px) 1fr;gap:8px 32px;align-items:baseline;padding:22px 0;border-top:1px solid oklch(.985 .012 var(--h) / .2)"><dt style="font-size:clamp(2.2rem,5vw,4rem);font-weight:700;letter-spacing:-.035em;font-stretch:88%;font-variant-numeric:tabular-nums;line-height:1">4.6 MB</dt><dd style="font-size:1.0625rem;max-width:62ch"><b style="font-weight:650">Installed.</b> <span style="color:var(--on-brand-dim)">The app in /Applications, 4.4 MB of it the program.</span></dd></div>
-        <div style="display:grid;grid-template-columns:minmax(150px,300px) 1fr;gap:8px 32px;align-items:baseline;padding:22px 0;border-top:1px solid oklch(.985 .012 var(--h) / .2)"><dt style="font-size:clamp(2.2rem,5vw,4rem);font-weight:700;letter-spacing:-.035em;font-stretch:88%;font-variant-numeric:tabular-nums;line-height:1">0</dt><dd style="font-size:1.0625rem;max-width:62ch"><b style="font-weight:650">Dependencies.</b> <span style="color:var(--on-brand-dim)">Swift, AppKit, SwiftUI and WebKit.</span></dd></div>
-        <div style="display:grid;grid-template-columns:minmax(150px,300px) 1fr;gap:8px 32px;align-items:baseline;padding:22px 0;border-top:1px solid oklch(.985 .012 var(--h) / .2)"><dt style="font-size:clamp(2.2rem,5vw,4rem);font-weight:700;letter-spacing:-.035em;font-stretch:88%;font-variant-numeric:tabular-nums;line-height:1">0.08 s</dt><dd style="font-size:1.0625rem;max-width:62ch"><b style="font-weight:650">To its first window.</b> <span style="color:var(--on-brand-dim)">From opening the app, once it is in cache.</span></dd></div>
-        <div style="display:grid;grid-template-columns:minmax(150px,300px) 1fr;gap:8px 32px;align-items:baseline;padding:22px 0;border-top:1px solid oklch(.985 .012 var(--h) / .2)"><dt style="font-size:clamp(2.2rem,5vw,4rem);font-weight:700;letter-spacing:-.035em;font-stretch:88%;font-variant-numeric:tabular-nums;line-height:1">26,864</dt><dd style="font-size:1.0625rem;max-width:62ch"><b style="font-weight:650">Lines of Swift.</b> <span style="color:var(--on-brand-dim)">In 73 files, all in the repository.</span></dd></div>
-      </dl>
-
       <p class="method reveal"><b>Method.</b> Sizes are <code>du -sk</code> of each app in /Applications. Memory is what macOS counts for each app and its helpers, with the same five pages open in every browser: two Wikipedia articles, MDN's page on CSS, a GitHub repository and Hacker News. Backlight ran from a fresh data folder with uBlock Origin Lite on (off in the row that says so), Chrome from a temporary profile with no extension, Safari and Search as they were. Two runs each, the mean shown. The first window is the median of six launches. Arc and Orion were not run, since they would have opened your own sessions.</p>
-    </div>
-  </section>
-
-  <section class="sec quiet" id="quiet" aria-labelledby="qh">
-    <div class="wrap">
-      <h2 id="qh" class="reveal">Quiet <span class="w">by</span> build.</h2>
-      <p class="lede reveal">It sends nothing but the pages you open and, once a day, a check for a newer version. Settings turns that off.</p>
-      <div class="quiet-grid">
-        <ul class="reveal">
-          <li><b>No telemetry</b><span>No analytics, crash reports or account.</span></li>
-          <li><b>No dependencies</b><span>Swift and the frameworks that ship with the Mac.</span></li>
-          <li><b>Updates by hand</b><span>Checked against GitHub's SHA-256 and the app's signature, and never installed without your say.</span></li>
-          <li><b>The source</b><span>MIT licence, on GitHub. Releases are built from a clean clone.</span></li>
-        </ul>
-        <div class="honest reveal">
-          <h3>What it cannot do yet</h3>
-          <ul>
-            <li><b>Passkeys.</b><span>WebKit gives them to a browser only with an entitlement Apple grants on request, tied to a paid developer account.</span></li>
-            <li><b>Device emulation, in part.</b><span>For an agent here, touch is made by a script and a slow network by the inspector, not by the engine; a screen's pixel ratio can't be set.</span></li>
-            <li><b>Pages built only for Chrome.</b><span>It is WebKit, like Safari, so a few of those misbehave.</span></li>
-          </ul>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -1091,7 +988,7 @@ html.twin .stage-sec::before { opacity: 0; }
     <div class="wrap">
       <h2 id="ch">Give the page <span class="w">all</span> of it.</h2>
       <div class="cta">
-        <a class="btn" href="https://github.com/mbahakeskin/Backlight/releases/latest">
+        <a class="btn" href="https://github.com/mbahakeskin/Backlight/releases/download/v0.9.5/Backlight-0.9.5.zip">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
           <span>Download for Mac<small>Version 0.9.5 · 2.1 MB · macOS 27</small></span>
         </a>
@@ -2035,23 +1932,13 @@ const spyTargets = [...new Set($$('[data-spy]').map(a => a.dataset.spy))].map(id
 const spy = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) $$('[data-spy]').forEach(a => a.classList.toggle('on', a.dataset.spy === e.target.id)); }), { rootMargin: '-45% 0px -50% 0px' });
 spyTargets.forEach(t => spy.observe(t));
 
-// the feature index: search and parts
-(() => {
-  const groups = $$('.fgroup'), input = $('#finder'), nav = $('#gnav'), none = $('#none'); let part = 'all';
-  nav.innerHTML = `<button data-g="all" aria-pressed="true">Everything</button>` + groups.map(g => `<button data-g="${g.dataset.group}" aria-pressed="false">${esc(g.dataset.title)}</button>`).join('');
-  const run = () => {
-    const q = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean); let any = false;
-    groups.forEach(g => {
-      let n = 0;
-      $$('.frow', g).forEach(r => { const ok = q.every(w => (r.textContent + ' ' + g.dataset.title).toLowerCase().includes(w)); r.hidden = !ok; if (ok) n++; });
-      const show = n > 0 && (part === 'all' || g.dataset.group === part); g.hidden = !show; if (show) any = true;
-    });
-    none.hidden = any;
-  };
-  input.addEventListener('input', run);
-  nav.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; part = b.dataset.g; $$('button', nav).forEach(x => x.setAttribute('aria-pressed', x === b)); run(); });
-  $('#clearFind').addEventListener('click', () => { input.value = ''; part = 'all'; $$('button', nav).forEach((x, i) => x.setAttribute('aria-pressed', i === 0)); run(); });
-})();
+// copy buttons: the install command
+$$('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+  const small = $('small', b), was = small.textContent;
+  try { await navigator.clipboard.writeText(b.dataset.copy); small.textContent = 'Copied. Paste it in Terminal.'; }
+  catch (e) { small.textContent = 'Select and copy: ' + b.dataset.copy; }
+  setTimeout(() => { small.textContent = was; }, 4000);
+}));
 
 // the agent example plays once when it is seen
 (() => {

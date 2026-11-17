@@ -50,11 +50,14 @@
       <div class="hero-row">
         <p class="hero-sub"><b data-name>BasicShell</b> is a small web browser for Mac. Tabs wait at the left edge and the address at the top, and neither takes room until you reach for it. It is written in Swift on the WebKit that ships with macOS, and your AI agent can use it too.</p>
         <div class="cta">
-          <a class="btn" href="https://github.com/mbahakeskin/BasicShell/releases/latest">
+          <a class="btn" href="https://github.com/mbahakeskin/BasicShell/releases/download/v@@VERSION@@/BasicShell-@@VERSION@@.zip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
             <span>Download for Mac<small>Version @@VERSION@@ · @@SIZE@@</small></span>
           </a>
           <a class="btn-quiet" href="https://github.com/mbahakeskin/BasicShell">View on GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="install" data-install>
+          <button type="button" class="copy" data-copy="curl -s https://api.github.com/repos/mbahakeskin/BasicShell/releases/latest | grep -o 'https://[^&quot;]*\.zip' | xargs curl -sL -o /tmp/BasicShell.zip &amp;&amp; unzip -q -o /tmp/BasicShell.zip -d /Applications &amp;&amp; open /Applications/BasicShell.app"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 8 4 4-4 4"/><path d="M12 17h7"/><rect x="2.5" y="4" width="19" height="16" rx="3"/></svg><span>Or install from Terminal<small>Copy the command. macOS shows no “cannot check this app” warning for it.</small></span></button>
         </div>
         <p class="meta">Free and open source (MIT) · macOS 27 · No account, no telemetry</p>
       </div>
@@ -198,18 +201,11 @@
 
   <section class="sec" id="features" aria-labelledby="fh">
     <div class="wrap">
-      <div class="index-head reveal">
-        <div>
-          <h2 id="fh">Small, but it <span class="w">does</span> a lot.</h2>
-          <p class="lede">All of it is in the app today. Search, or pick a part.</p>
-        </div>
-        <label class="finder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><span class="sr">Search the features</span><input id="finder" type="search" placeholder="Search the features" autocomplete="off"></label>
+      <h2 id="fh" class="reveal">Small, but it <span class="w">does</span> a lot.</h2>
+      <div class="hl-grid reveal">
+<!--HIGHLIGHTS-->
       </div>
-      <div class="groups-nav" id="gnav" role="group" aria-label="Parts"></div>
-      <div id="findex">
-<!--FEATURES-->
-      </div>
-      <p class="none" id="none" hidden>Nothing here by that name. <button type="button" id="clearFind" style="background:none;border:0;color:var(--brand);font-weight:600;padding:0;text-decoration:underline">Show everything</button></p>
+      <p class="hl-more reveal"><a href="https://github.com/mbahakeskin/BasicShell/blob/main/FEATURES.md">Everything it does, one line each <span aria-hidden="true">↗</span></a></p>
     </div>
   </section>
 
@@ -238,34 +234,7 @@
         </div>
       </div>
 
-      <dl class="ledger reveal" style="margin:72px 0 0; display:grid; gap:0">
-<!--LEDGER-->
-      </dl>
-
       <p class="method reveal"><b>Method.</b> Sizes are <code>du -sk</code> of each app in /Applications. Memory is what macOS counts for each app and its helpers, with the same five pages open in every browser: two Wikipedia articles, MDN's page on CSS, a GitHub repository and Hacker News. BasicShell ran from a fresh data folder with uBlock Origin Lite on (off in the row that says so), Chrome from a temporary profile with no extension, Safari and Search as they were. Two runs each, the mean shown. The first window is the median of six launches. Arc and Orion were not run, since they would have opened your own sessions.</p>
-    </div>
-  </section>
-
-  <section class="sec quiet" id="quiet" aria-labelledby="qh">
-    <div class="wrap">
-      <h2 id="qh" class="reveal">Quiet <span class="w">by</span> build.</h2>
-      <p class="lede reveal">It sends nothing but the pages you open and, once a day, a check for a newer version. Settings turns that off.</p>
-      <div class="quiet-grid">
-        <ul class="reveal">
-          <li><b>No telemetry</b><span>No analytics, crash reports or account.</span></li>
-          <li><b>No dependencies</b><span>Swift and the frameworks that ship with the Mac.</span></li>
-          <li><b>Updates by hand</b><span>Checked against GitHub's SHA-256 and the app's signature, and never installed without your say.</span></li>
-          <li><b>The source</b><span>MIT licence, on GitHub. Releases are built from a clean clone.</span></li>
-        </ul>
-        <div class="honest reveal">
-          <h3>What it cannot do yet</h3>
-          <ul>
-            <li><b>Passkeys.</b><span>WebKit gives them to a browser only with an entitlement Apple grants on request, tied to a paid developer account.</span></li>
-            <li><b>Device emulation, in part.</b><span>For an agent here, touch is made by a script and a slow network by the inspector, not by the engine; a screen's pixel ratio can't be set.</span></li>
-            <li><b>Pages built only for Chrome.</b><span>It is WebKit, like Safari, so a few of those misbehave.</span></li>
-          </ul>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -282,7 +251,7 @@
     <div class="wrap">
       <h2 id="ch">Give the page <span class="w">all</span> of it.</h2>
       <div class="cta">
-        <a class="btn" href="https://github.com/mbahakeskin/BasicShell/releases/latest">
+        <a class="btn" href="https://github.com/mbahakeskin/BasicShell/releases/download/v@@VERSION@@/BasicShell-@@VERSION@@.zip">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
           <span>Download for Mac<small>Version @@VERSION@@ · @@SIZE@@ · macOS 27</small></span>
         </a>

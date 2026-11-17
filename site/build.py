@@ -17,72 +17,20 @@ SIZE = "2.1 MB"      # the release zip
 
 def esc(s): return html.escape(s, quote=False)
 
-# ---- Features -------------------------------------------------------------
-FEATURES = [
- ("edges", "Windows and edges", "", [
-  ("The page takes the whole window", "", "Tabs sit in a sidebar and the address in a top bar. Both slide in when the pointer reaches their edge, and either can be pinned open."),
-  ("Sidebar only", "", "Settings can drop the top bar. The sidebar then holds back, forward, the site and its buttons. A new install starts this way."),
-  ("Full screen", "", "On a Mac with a notch the top bar runs around it. The menu bar and the Dock stay hidden until you press against the edge."),
-  ("A new tab is a field", "", "It opens over the page you are on, and the tab exists once you enter something. It suggests tabs, bookmarks and history, and matches letters in order (“gthub”) or two initials (“gh bl”)."),
-  ("Keywords and commands", "", "Type a site's keyword and a space (“yt lofi”) to search it. Start with > to run any menu command."),
- ]),
- ("tabs", "Tabs, groups and profiles", "", [
-  ("Pinned tabs", "", "Three to a row, as tiles above the rest."),
-  ("Tab groups", "", "A coloured name that folds, with a line of that colour down its tabs. Right-click a tab to add it."),
-  ("Tabs stay under their parent", "", "A tab opened from a link sits under its source, and closing it takes you back there."),
-  ("Profiles", "", "Coloured dots above the pinned tabs. Each profile has its own cookies, sign-ins, tabs, history and bookmarks. Extensions, zoom and site permissions are shared."),
-  ("Split view", "", "Right-click a tab or link and choose Open Side by Side. Drag the divider; the framed half has the keyboard."),
-  ("Private tabs", "", "They share one cookie jar kept in memory, which goes when the app quits. They are never saved and never shown to an agent."),
-  ("Quiet tabs", "", "A tab off screen is frozen, and unloaded after six hours or when memory runs short. A tab with unsent typing, sound or a call is left alone."),
- ]),
- ("reading", "Reading and looking", "", [
-  ("Reader", "⌥⌘R", "Just the article, in light, sepia or dark, serif or sans, in five sizes."),
-  ("Dark pages", "⇧⌘D", "A page that stays white while macOS is dark gets dark colours, pictures untouched. Off until you turn it on."),
-  ("Peek", "⇧ click", "A link's page in a panel over the one you are reading; Esc puts it away. Hold ⌘ over a link for a smaller preview."),
-  ("Translate Page", "", "The system's own translation, done on this Mac."),
-  ("Zoom, by site", "⌘+ ⌘−", "Set once and remembered for the site, except in private tabs."),
-  ("Picture in picture", "⇧⌘P", "Just the video, in a window you can resize. A playing video goes there by itself when you leave its tab."),
-  ("The page as one picture", "⇧⌘R", "Copies the whole page, top to bottom, as a single image."),
-  ("Pick Color from Screen", "", "In the View menu: macOS's eyedropper, with the color's code copied to the clipboard."),
- ]),
- ("saving", "Saving", "", [
-  ("A download button for photos and videos", "", "On the sites you list, a small button appears over a large photo or video. The list starts empty."),
-  ("Videos sent in pieces", "", "A video the page loads in pieces is joined into one mp4: an HLS playlist (AES-128 included), or a picture file and a sound file."),
-  ("Downloads you can steer", "", "Pause, resume, cancel and restart, with speed and time left. Paused ones and the last hundred finished survive quitting."),
-  ("Copy address without the tracking", "⇧⌘C", "Removes utm_, fbclid, gclid and share codes, but never a video's t or a search's q. ⌥⇧⌘C copies the address as it is."),
-  ("Import", "", "Bookmarks and history from Chrome and its kin, Safari and Firefox, and a password file (CSV) from Chrome and its kin."),
- ]),
- ("privacy", "Privacy and the network", "", [
-  ("No telemetry, no account", "", "Only the pages you open, plus a daily check for a newer version that Settings turns off."),
-  ("Ads and trackers", "", "Blocked by uBlock Origin Lite, the Safari extension from the App Store, YouTube's ads included."),
-  ("Tracking parameters", "", "Links you follow lose fbclid, gclid and the like, using the list macOS keeps for Safari."),
-  ("What a site may do", "", "The lock shows how the page was fetched, what it may do (location, notifications), what it stores here and its zoom."),
-  ("Google keeps your region", "", "Searches carry the Mac's language and region, so a VPN doesn't switch the results."),
- ]),
- ("ext", "Extensions", "", [
-  ("Chrome Web Store, folders, Safari", "", "Install from the Chrome Web Store (signature checked), an unpacked folder, or a Safari extension inside its app. One set serves every profile."),
-  ("Talks to Mac apps", "", "Bitwarden's Touch ID through its desktop app works."),
- ]),
- ("dev", "For developers", "", [
-  ("Develop and Debug menus", "", "As in Safari: Web Inspector, console, page source, timelines and WebKit's experimental features."),
-  ("Settings kept per site", "", "A site's user agent, color scheme and switches (JavaScript, images, styles) are saved and applied when you visit it."),
-  ("Any user agent, any size", "", "iPhone, iPad, Chrome, Firefox or your own, at phone, tablet or typed-in sizes."),
-  ("Pick Element for the Agent", "", "Point at an element and the agent gets its selector, text, HTML, styles, framework components and the page's recent errors."),
- ]),
+# ---- Highlights (the long list is FEATURES.md in the repository) ----------
+HIGHLIGHTS = [
+ ("The page takes the whole window", "Tabs in a sidebar, the address in a top bar. Both slide in at their edge, and either can stay pinned."),
+ ("Tabs, groups, profiles, split view", "Profiles keep their own sign-ins. Tabs off screen are frozen, and unloaded after a while."),
+ ("Reader, dark pages, Peek", "Just the article; dark colours for white pages; a link's page in a panel over the one you are reading."),
+ ("Picture in picture, downloads", "A video in its own window. Downloads you can pause, and a button for photos and videos on the sites you list."),
+ ("Private by build", "No telemetry, no account. Ads and trackers blocked by uBlock Origin Lite, tracking parameters cut from links."),
+ ("Chrome extensions", "From the Chrome Web Store, a folder or a Safari app. Bitwarden works, Touch ID included."),
+ ("Translate on this Mac", "The system's own translation, text by text in the page, and back with one press."),
+ ("For developers", "Develop and Debug menus as in Safari, any user agent or size, settings kept per site."),
 ]
 
-def feature_html():
-    out = []
-    for gid, title, sub, rows in FEATURES:
-        out.append(f'      <div class="fgroup reveal" id="f-{gid}" data-group="{gid}" data-title="{esc(title)}">')
-        out.append(f'        <h3>{esc(title)}' + (f'<small>{esc(sub)}</small>' if sub else '') + '</h3>')
-        out.append('        <div class="frows">')
-        for name, keys, text in rows:
-            k = f' <kbd>{esc(keys)}</kbd>' if keys else ''
-            out.append(f'          <div class="frow"><h4>{esc(name)}{k}</h4><p>{esc(text)}</p></div>')
-        out.append('        </div>')
-        out.append('      </div>')
-    return "\n".join(out)
+def highlights_html():
+    return "\n".join(f'        <div class="hl"><h3>{esc(h)}</h3><p>{esc(p)}</p></div>' for h, p in HIGHLIGHTS)
 
 # ---- FAQ ------------------------------------------------------------------
 FAQ = [
@@ -113,20 +61,6 @@ def cpu_html():
         w = max(0.4, v / top * 100)
         out.append(f'            <div class="bar-row{" me" if me else ""}"><span class="name">{name}</span><div class="bar-track" style="--w:{w:.1f}"><span class="bar-fill"></span><span class="bar-val{" in-bar" if w > 75 else ""}">{v:.1f}%</span></div></div>')
     return "\n".join(out)
-
-def ledger_html():
-    rows = [
-     ("2.0 MB", "The download.", "A zip with the agent tools in it."),
-     ("4.6 MB", "Installed.", "The app in /Applications, 4.4 MB of it the program."),
-     ("0", "Dependencies.", "Swift, AppKit, SwiftUI and WebKit."),
-     (f'{RES["first_window_ms"] / 1000:.2f} s'.replace("0.0", "0.0"), "To its first window.", "From opening the app, once it is in cache."),
-     ("26,864", "Lines of Swift.", "In 73 files, all in the repository."),
-    ]
-    out = []
-    for big, label, small in rows:
-        out.append(f'        <div style="display:grid;grid-template-columns:minmax(150px,300px) 1fr;gap:8px 32px;align-items:baseline;padding:22px 0;border-top:1px solid oklch(.985 .012 var(--h) / .2)"><dt style="font-size:clamp(2.2rem,5vw,4rem);font-weight:700;letter-spacing:-.035em;font-stretch:88%;font-variant-numeric:tabular-nums;line-height:1">{esc(big)}</dt><dd style="font-size:1.0625rem;max-width:62ch"><b style="font-weight:650">{esc(label)}</b> <span style="color:var(--on-brand-dim)">{esc(small)}</span></dd></div>')
-    return "\n".join(out)
-
 
 def ram_html():
     mp = os.path.join(HERE, "src", "memory.json")
@@ -173,7 +107,7 @@ def read(p): return open(os.path.join(SRC, p), encoding="utf-8").read()
 font_path = os.environ.get("FONT") or os.path.join(SRC, "GoogleSansFlex-latin.woff2")
 font_b64 = base64.b64encode(open(font_path, "rb").read()).decode()
 
-body = read("body.html").replace("<!--FEATURES-->", feature_html()).replace("<!--FAQ-->", faq_html()).replace("<!--CPU-->", cpu_html()).replace("<!--LEDGER-->", ledger_html()).replace("<!--RAM-->", ram_html())
+body = read("body.html").replace("<!--HIGHLIGHTS-->", highlights_html()).replace("<!--FAQ-->", faq_html()).replace("<!--CPU-->", cpu_html()).replace("<!--RAM-->", ram_html())
 css = read("site.css").replace("__FONT_LATIN__", font_b64) + "\n" + read("stage.css")
 js = read("app.js")
 

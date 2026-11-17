@@ -926,23 +926,13 @@ const spyTargets = [...new Set($$('[data-spy]').map(a => a.dataset.spy))].map(id
 const spy = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) $$('[data-spy]').forEach(a => a.classList.toggle('on', a.dataset.spy === e.target.id)); }), { rootMargin: '-45% 0px -50% 0px' });
 spyTargets.forEach(t => spy.observe(t));
 
-// the feature index: search and parts
-(() => {
-  const groups = $$('.fgroup'), input = $('#finder'), nav = $('#gnav'), none = $('#none'); let part = 'all';
-  nav.innerHTML = `<button data-g="all" aria-pressed="true">Everything</button>` + groups.map(g => `<button data-g="${g.dataset.group}" aria-pressed="false">${esc(g.dataset.title)}</button>`).join('');
-  const run = () => {
-    const q = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean); let any = false;
-    groups.forEach(g => {
-      let n = 0;
-      $$('.frow', g).forEach(r => { const ok = q.every(w => (r.textContent + ' ' + g.dataset.title).toLowerCase().includes(w)); r.hidden = !ok; if (ok) n++; });
-      const show = n > 0 && (part === 'all' || g.dataset.group === part); g.hidden = !show; if (show) any = true;
-    });
-    none.hidden = any;
-  };
-  input.addEventListener('input', run);
-  nav.addEventListener('click', e => { const b = e.target.closest('[data-g]'); if (!b) return; part = b.dataset.g; $$('button', nav).forEach(x => x.setAttribute('aria-pressed', x === b)); run(); });
-  $('#clearFind').addEventListener('click', () => { input.value = ''; part = 'all'; $$('button', nav).forEach((x, i) => x.setAttribute('aria-pressed', i === 0)); run(); });
-})();
+// copy buttons: the install command
+$$('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+  const small = $('small', b), was = small.textContent;
+  try { await navigator.clipboard.writeText(b.dataset.copy); small.textContent = 'Copied. Paste it in Terminal.'; }
+  catch (e) { small.textContent = 'Select and copy: ' + b.dataset.copy; }
+  setTimeout(() => { small.textContent = was; }, 4000);
+}));
 
 // the agent example plays once when it is seen
 (() => {

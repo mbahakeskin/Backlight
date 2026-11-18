@@ -120,6 +120,9 @@ final class Tab: NSObject, Identifiable {
     // What the agent tools keep with a tab (see Agent.swift).
     /// Its number, as the agent knows it.
     @ObservationIgnored var agentNumber: Int?
+    /// Opened by the agent (`open`, or a link in a page it worked in): the tabs `close` with `yours` may close. A tab the
+    /// person had open and the agent was let into is not one, whatever it did there.
+    @ObservationIgnored var agentOpened = false
     /// The web view's points to a pixel of the last picture the agent took.
     @ObservationIgnored var agentScale: CGFloat = 1
     /// The last pictures it took, by number, so a click can be given in the
@@ -227,7 +230,7 @@ final class Tab: NSObject, Identifiable {
             ?? (isPrivate ? nil : url.flatMap { Extensions.shared.configuration(for: $0) })
             ?? Web.configuration(privately: isPrivate, store: store ?? (isPrivate ? nil : profile.dataStore))
         store = config.websiteDataStore
-        let web = WKWebView(frame: .zero, configuration: config)
+        let web = PageView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = true
@@ -621,5 +624,70 @@ extension Tab: WKNavigationDelegate {
         Dialogs.show(alert, over: web) { answer in
             if answer == .alertFirstButtonReturn { NSWorkspace.shared.open(url) }
         }
+    }
+}
+
+/// The page's web view. A click that reaches the page while one of the panels over it (the sidebar, the top bar)
+/// is where it fell is written down with the calls that brought it there (debug log). And the page is not told
+/// the pointer moves over a panel: it learns that through its own tracking areas, which AppKit serves whatever
+/// stands in front of the page, so a link under the sidebar showed its hover and its tooltip.
+final class PageView: WKWebView {
+    /// The page has been told the pointer is over it, and not told it left.
+    private var pointerOver = false
+
+    private func panel(_ event: NSEvent) -> String? {
+        (window?.windowController as? BrowserWindow)?.panelOver(event)
+    }
+
+    private func trace(_ what: String, _ event: NSEvent) {
+        guard Debug.enabled, let over = panel(event) else { return }
+        let calls = Thread.callStackSymbols.dropFirst(2).prefix(14).map { line -> String in
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            return parts.dropFirst(3).prefix(1).joined()
+        }
+        Debug.log("click", "the page got \(what) under the \(over): \(calls.joined(separator: " < "))")
+    }
+
+    /// The page told the pointer has left, at the place it is.
+    private func leave(_ event: NSEvent) {
+        guard pointerOver else { return }
+        pointerOver = false
+        if let exit = NSEvent.enterExitEvent(with: .mouseExited, location: event.locationInWindow, modifierFlags: event.modifierFlags,
+                                             timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil,
+                                             eventNumber: 0, trackingNumber: 0, userData: nil) {
+            super.mouseExited(with: exit)
+        }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if panel(event) != nil { return leave(event) }
+        pointerOver = true
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if panel(event) != nil { return }
+        pointerOver = true
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        pointerOver = false
+        super.mouseExited(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if panel(event) != nil { return }
+        super.cursorUpdate(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        trace("mouseDown", event)
+        super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        trace("mouseUp", event)
+        super.mouseUp(with: event)
     }
 }

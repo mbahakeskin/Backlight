@@ -488,7 +488,7 @@ final class ReaderView: NSView, WKNavigationDelegate, WKUIDelegate {
         config.mediaTypesRequiringUserActionForPlayback = .all
         web = WKWebView(frame: .zero, configuration: config)
         var options: () -> Void = {}
-        controls = NSHostingView(rootView: ReaderBar(appearance: { options() }, close: close))
+        controls = SolidHost(rootView: ReaderBar(appearance: { options() }, close: close))
         super.init(frame: .zero)
         options = { [weak self] in self?.showOptions() }
         autoresizingMask = [.width, .height]

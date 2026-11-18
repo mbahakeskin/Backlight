@@ -358,7 +358,7 @@ enum AgentPage {
       // only the page's main area.
       const text = (offset, max, options) => {
         options = options || {};
-        let whole = document.body ? document.body.innerText : "", note = "";
+        let whole = document.body ? document.body.innerText : "", note = "", root = document.body;
         if (options.selector) {
           let found = [];
           try { found = [...document.querySelectorAll(options.selector)].filter(shown); } catch (error) { return "That isn't a CSS selector: " + options.selector; }
@@ -369,8 +369,34 @@ enum AgentPage {
           const area = ["main", "[role=main]", "article", "#main-content", "#content", "#main", ".main-content", ".content"]
             .map((s) => { try { return document.querySelector(s); } catch (error) { return null; } })
             .find((e) => e && shown(e) && (e.innerText || "").length >= 200);
-          if (area) { whole = area.innerText; note = "The page's main area only.\n\n"; }
+          if (area) { whole = area.innerText; root = area; note = "The page's main area only.\n\n"; }
           else note = "No main area found: the whole page.\n\n";
+        }
+        // Pictures that are most of what there is to see, with little text beside them: what is written in them is not in this reading.
+        if (!options.selector && root) {
+          const box = root.getBoundingClientRect(), space = Math.max(box.width * box.height, 1);
+          let pictures = 0, covered = 0;
+          for (const p of root.querySelectorAll("img, canvas, svg")) {
+            if (!shown(p)) continue;
+            const r = p.getBoundingClientRect();
+            if (r.width >= 300 && r.height >= 150) { pictures++; covered += r.width * r.height; }
+          }
+          if (pictures && covered / space > 0.3 && whole.length < 4000)
+            note += "Note: " + pictures + " large picture" + (pictures > 1 ? "s cover" : " covers") + " about " + Math.round(100 * covered / space) + "% of this area, and there are only " + whole.length + " characters of text: whatever is written in the pictures is not in this reading. `screenshot` shows them.\n\n";
+        }
+        // Lines the page repeats (a band of the same words again and again) are given once.
+        {
+          const lines = whole.split("\n"), count = new Map();
+          for (const l of lines) { const k = l.trim(); if (k.length >= 4 && !/^[\d\s.,:;%₺$€£+\-–/]+$/.test(k)) count.set(k, (count.get(k) || 0) + 1); }
+          if ([...count.values()].some((n) => n >= 3)) {
+            const given = new Set(), kept = []; let dropped = 0;
+            for (const l of lines) {
+              const k = l.trim(), n = count.get(k) || 0;
+              if (n >= 3) { if (given.has(k)) { dropped++; continue; } given.add(k); kept.push(l + "  (×" + n + ")"); } else kept.push(l);
+            }
+            whole = kept.join("\n");
+            note += dropped + " repeated lines are given once, marked (×N).\n\n";
+          }
         }
         const part = whole.slice(offset, offset + max);
         const more = whole.length - offset - part.length;
@@ -423,26 +449,7 @@ enum AgentPage {
         const metaLine = metaPrice ? [meta("og:title"), metaPrice + " " + (meta("product:price:currency") || meta("og:price:currency")), (meta("product:availability") || meta("og:availability")), meta("og:url")].filter(Boolean).join(" | ") : "";
         let how = "declared by the page (JSON-LD, microdata)", cols = "name | brand | price | stock | rating | id | address";
         if (!lines.length && metaLine) { lines.push(metaLine); how = "declared by the page (meta tags)"; cols = "title | price | stock | address"; }
-        if (!lines.length) {
-          // Cards that show a price: a guess from how the page looks.
-          const price = /(?:₺|\bTL\b|\bTRY\b|\$|€|£|\bUSD\b|\bEUR\b)\s?\d[\d.,]*|\d[\d.,]*\s?(?:₺|\bTL\b|\bTRY\b|\$|€|£|\bUSD\b|\bEUR\b)/gi;
-          const cards = new Map();
-          for (const a of document.querySelectorAll("a[href]")) {
-            if (cards.size >= 400 || !/^https?:/i.test(a.href) || !shown(a)) continue;
-            const title = clean(a.innerText || (a.querySelector("img") || {}).alt || a.title || a.getAttribute("aria-label"), 160);
-            if (title.length < 3) continue;
-            let card = a;
-            for (let i = 0; i < 7 && card && !((card.innerText || "").match(price)); i++) card = card.parentElement;
-            if (!card || card === document.body) continue;
-            const found = (card.innerText || "").match(price) || [];
-            if (found.length > 4) continue;
-            const was = cards.get(card);
-            if (!was || (!/^[\d.,\s₺$€£TLtl]+$/.test(title) && title.length > was.title.length)) cards.set(card, { title, href: a.href, prices: [...new Set(found.map((x) => clean(x, 24)))].slice(0, 2) });
-          }
-          for (const { title, href, prices } of cards.values()) add(title, [prices.join(" / "), href]);
-          how = "a guess from the cards that show a price (the page declares no product data)"; cols = "name | price | address";
-        }
-        if (!lines.length) return header() + "\n\nNo product data: the page declares none and no card shows a price. `read_text` with `main` reads it as text.";
+        if (!lines.length) return header() + "\n\nNo product data: the page does not declare any (JSON-LD, microdata or meta tags), and Backlight does not guess it from how a page looks. `read_text` with `main` reads the page as text.";
         return header() + "\n\n" + lines.length + " found, " + how + ". " + cols + ":\n" + lines.join("\n");
       };
 
@@ -901,7 +908,11 @@ enum AgentPage {
               let score = 0;
               if (r === "searchbox" || c.type === "search") score += 6;
               if (hint.test(texts)) score += 4;
+              // The short names sites give a search field (q, s, kw, keyword, term).
+              else if (/(^|[\s_\-\[])(q|s|kw|keyword|keywords|term|terms|searchtext|aranan)([\s_\-\]]|$)/i.test([c.name, c.id].join(" "))) score += 4;
               if (c.closest && c.closest('[role="search"], form[action*="search"]')) score += 3;
+              // Fields that are for something else: a newsletter, a coupon, a login, a postcode.
+              if (/mail|newsletter|subscribe|bülten|bulten|abone|login|signin|password|coupon|kupon|promo|zip|postal|phone|telefon/i.test(texts) || (c.type && /^(email|tel|password|number)$/.test(c.type))) score -= 6;
               if (onScreen(box(c))) score += 2;
               if (c.closest && c.closest("header, [role=banner], nav")) score += 1;
               if (score >= 4) found.push({ score, c });

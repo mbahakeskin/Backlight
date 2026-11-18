@@ -64,7 +64,73 @@ extension BrowserWindow {
             host.removeFromSuperview()
             stageHost = nil
         }
+        // Whichever way the inspector is asked for (a menu, a key, Inspect Element in a page's menu), it has the
+        // holder to dock to while there is a frame.
+        if size == nil { releaseInspectorHolder() } else { prepareInspector() }
         layout(animated: false)
+    }
+
+    // MARK: - the Web Inspector in a frame
+
+    /// WebKit docks the inspector to the page only where the page is at least 750 points wide, and in a frame
+    /// at a phone's size it is 390: the inspector came up as a window of its own over the frame. So with a frame
+    /// it is given a view to dock to as large as the whole ground (`inspectorHolder`, in `inspectorDock`, which
+    /// is the ground): WebKit makes the holder smaller by the inspector's share, and the frame stands in what
+    /// is left (BrowserWindow.layout). The dock is there because WebKit sizes the inspector to the width of
+    /// the view the holder is in, which would be the window's. Called before the inspector is shown.
+    func prepareInspector() {
+        guard let web = shell.selected?.webView else { return Debug.log("develop", "inspector: no page shown to dock for") }
+        let setter = NSSelectorFromString("_setInspectorAttachmentView:")
+        guard web.responds(to: setter) else { return Debug.log("develop", "inspector: this WebKit has no attachment view") }
+        guard stage.size != nil else {
+            _ = web.perform(setter, with: nil)
+            return
+        }
+        if inspectorHolder == nil {
+            let dock = NSView(frame: lastGround)
+            let holder = NSView(frame: dock.bounds)
+            holder.autoresizingMask = [.width, .height]
+            holder.postsFrameChangedNotifications = true
+            dock.addSubview(holder)
+            root.addSubview(dock, positioned: .below, relativeTo: stageHost ?? pageView)
+            inspectorDock = dock
+            inspectorHolder = holder
+            NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: holder, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.layout(animated: false) }
+            }
+        }
+        // A phone's frame is tall and the window wide: the inspector docks beside it, where WebKit's own setting
+        // (it remembers the side chosen, for every inspector) is still the bottom.
+        let defaults = UserDefaults.standard
+        if defaults.integer(forKey: BrowserWindow.inspectorSideKey) == 0 {
+            defaults.set(1, forKey: BrowserWindow.inspectorSideKey)
+            inspectorSideSet = true
+        }
+        _ = web.perform(setter, with: inspectorHolder)
+        Debug.log("develop", "inspector: docks to \(inspectorDock?.frame ?? .zero) for \(shell.selected?.name ?? "?") (side \(defaults.integer(forKey: BrowserWindow.inspectorSideKey)))")
+    }
+
+    /// WebKit's setting for where the inspector docks: 0 the bottom, 1 the right, 2 the left.
+    static let inspectorSideKey = "__WebInspectorPageGroupLevel1__.WebKit2InspectorAttachmentSide"
+
+    /// The frame is gone: the inspector docked to its holder goes with it, and the holder.
+    func releaseInspectorHolder() {
+        guard let holder = inspectorHolder else { return }
+        inspectorHolder = nil
+        NotificationCenter.default.removeObserver(self, name: NSView.frameDidChangeNotification, object: holder)
+        let setter = NSSelectorFromString("_setInspectorAttachmentView:")
+        for tab in shell.allTabs {
+            guard let web = tab.webView, web.responds(to: setter), (web.value(forKey: "_inspectorAttachmentView") as? NSView) === holder else { continue }
+            Develop.show("close", of: web)
+            _ = web.perform(setter, with: nil)
+        }
+        inspectorDock?.removeFromSuperview()
+        inspectorDock = nil
+        // Back to the bottom, unless it was set to something else meanwhile.
+        if inspectorSideSet, UserDefaults.standard.integer(forKey: BrowserWindow.inspectorSideKey) == 1 {
+            UserDefaults.standard.set(0, forKey: BrowserWindow.inspectorSideKey)
+        }
+        inspectorSideSet = false
     }
 
 /// A phone's or a tablet's frame and way of introducing itself, or back.

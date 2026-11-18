@@ -38,6 +38,8 @@ struct PanelView: View {
                 .onTapGesture { window.closePanel() }
             if let panel = shell.panel {
                 card(panel)
+                    // A click on a part of the card that draws nothing is the card's, not the backdrop's (which closes it).
+                    .background(Color.clear.contentShape(Rectangle()).onTapGesture {})
             }
         }
         .onAppear { focused = true }

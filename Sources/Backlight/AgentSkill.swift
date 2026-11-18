@@ -20,13 +20,14 @@ enum AgentSkill {
     - Most of the time goes to your own turns, not the browser. One call that does several things beats several calls.
     - `open` lists what is on the page, with refs. Acting tools (`click`, `type`, `key`, `fill`) say what changed afterwards. Don't `read_page` only to see a result.
     - `search` uses the site's own search in one call. `fill_form` fills a whole form. `read_pages` reads up to 25 addresses at once (with `links` to find the next ones). `batch` runs steps whose refs you already know.
+    - A call with no `tab` goes to the tab you opened last, never to the one the person is looking at: for one of theirs, give its number from `tabs`. `close` with `yours` closes only tabs you opened.
     - Refs stay with their elements while the page lives; after a navigation, the new page's list is the one to use. When refs are not known yet, `click`, `fill`, `type`, `hover` take a `label` (what it says) or a `selector`, found when the call is made, so one `batch` can navigate, search and click.
     - `batch` actions can be `optional` or `repeat: N` (until they fail, e.g. click "Load more" until it is gone). Tool calls you send together run together, so ask for independent things in one turn.
     - For a site's list or search data, `api` (developer tools) shows the calls the page made and gives their JSON as rows (`path: data.items[*]`, `fields: [name, price]`); cheaper and sturdier than scraping the page. `evaluate` with same-site `fetch` and `args` covers loops over many pages in one call.
     - `read_page` with `since_last: true` says only what changed since your last read of the page.
     - Acting tools take an optional `summary` (a few words on the effect, "Adds the headset to the cart"): it shows in the person's list of what you did. `close` takes `yours: true` or `tabs: [...]` to tidy up in one call.
     - `expect: {text: ...}` on `click`, `type`, `fill` and the like checks the result in the same call and fails if the page is not so.
-    - `tabs` takes `from_tab`, `to_tab`, `yours`, `query` to list less. `read_text` takes `selector` or `main` to skip the menu and footer, and `structured: true` for a store page's products (name, price, stock).
+    - `tabs` takes `from_tab`, `to_tab`, `yours`, `query` to list less. `read_text` takes `selector` or `main` to skip the menu and footer, `structured: true` for the products a store page declares (name, price, stock; none are guessed). It says when a page is mostly pictures with little text: `screenshot` shows what is written in them. `read_pages` takes `main` and `structured` too.
 
     ## Reading and looking
 

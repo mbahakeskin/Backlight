@@ -114,6 +114,13 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     let stage = Stage()
     var stageHost: NSHostingView<StageView>?
     var stagedZoom: [ObjectIdentifier: CGFloat] = [:]
+    /// What the Web Inspector docks to while the page is in a frame (see Stage.swift), and the ground the
+    /// layout last gave the page, which is its size when the inspector is not there.
+    var inspectorHolder: NSView?
+    var inspectorDock: NSView?
+    /// The inspector was set to dock at the side for the frame, from the bottom it was at (Stage.prepareInspector).
+    var inspectorSideSet = false
+    var lastGround = NSRect.zero
     /// The downloads list is out because a download began, not because it was asked for.
     var downloadsShownByApp = false
     private var findHost: NSHostingView<FindBarView>?
@@ -196,8 +203,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         empty.autoresizingMask = [.width, .height]
         page.addSubview(empty)
 
-        sidebar = hosting(SidebarView(shell: shell, window: self))
-        topBar = hosting(TopBarView(shell: shell, window: self))
+        sidebar = hosting(SidebarView(shell: shell, window: self), solid: true)
+        topBar = hosting(TopBarView(shell: shell, window: self), solid: true)
         root.addSubview(sidebar)
         root.addSubview(topBar)
         root.addSubview(loading)
@@ -207,8 +214,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         root.addSubview(clock)
     }
 
-    private func hosting<V: View>(_ view: V) -> NSHostingView<V> {
-        let host = NSHostingView(rootView: view)
+    /// `solid`: the panel is the one that takes a click on any part of it, a part that draws nothing included
+    /// (see SolidHost). Without it, such a click went through to the page behind.
+    private func hosting<V: View>(_ view: V, solid: Bool = false) -> NSHostingView<V> {
+        let host = solid ? SolidHost(rootView: view) : NSHostingView(rootView: view)
         host.sizingOptions = []
         host.safeAreaRegions = []
         return host
@@ -260,7 +269,16 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             }
         }
         // At another size the page stands in a frame on a ground of its own.
-        let ground = pageFrame
+        var ground = pageFrame
+        lastGround = ground
+        // The Web Inspector docked to the ground takes some of it: the frame stands in what is left.
+        if let dock = inspectorDock, let holder = inspectorHolder, stage.size != nil {
+            if dock.frame != ground { dock.frame = ground }
+            if abs(holder.frame.width - dock.bounds.width) >= 2 || abs(holder.frame.height - dock.bounds.height) >= 2 {
+                ground = NSRect(x: ground.minX + holder.frame.minX, y: ground.minY + holder.frame.minY,
+                                width: holder.frame.width, height: holder.frame.height)
+            }
+        }
         if let size = stage.size {
             let fit = Stage.fit(size, in: ground.size)
             pageFrame = NSRect(x: ground.minX + fit.rect.minX, y: ground.maxY - fit.rect.maxY,
@@ -295,6 +313,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             self.stageHost?.frame = ground
             self.page.frame = pageFrame
             self.peekView?.frame = pageFrame
+            self.scrollShot?.view.frame = pageFrame
             #if AGENT
             self.agentFrame?.frame = pageFrame
             #endif
@@ -398,6 +417,14 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         // (an AppKit view), and the bar then stayed out for good.
         let clicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             MainActor.assumeIsolated {
+                // For the debug log: what a click reached, so that a click that did something else can be traced.
+                if Debug.enabled, let self, event.window === self.window, event.type == .leftMouseDown {
+                    let point = self.root.convert(event.locationInWindow, from: nil)
+                    let hit = self.root.hitTest(self.root.convert(point, to: self.root.superview))
+                    func name(_ view: NSView?) -> String { view.map { String(describing: type(of: $0)).prefix(48).description } ?? "nil" }
+                    let inside = [("sidebar", self.sidebar), ("topBar", self.topBar), ("page", self.page)].filter { $0.1.frame.contains(point) && $0.1.alphaValue > 0.01 }.map(\.0)
+                    Debug.log("click", "at (\(Int(point.x)), \(Int(point.y))) reached \(name(hit)); over \(inside.joined(separator: ", ")); panel \(self.panelHost != nil), stage \(self.stage.size != nil), full screen \(self.shell.fullScreen)")
+                }
                 guard let self, event.window === self.window, self.shell.editingAddress else { return }
                 let point = self.root.convert(event.locationInWindow, from: nil)
                 guard !self.topBar.frame.contains(point) else { return }
@@ -406,11 +433,35 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             }
             return event
         }
-        monitors = [pointer, elsewhere, keys, clicks].compactMap { $0 }
+        // For the debug log: a press that did not come to this app at all while a scrolling screenshot is being made (at the
+        // very top of the screen, say).
+        let away = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard Debug.enabled, let self, self.scrollShot != nil, let screen = self.window?.screen else { return }
+                let at = NSEvent.mouseLocation
+                Debug.log("click", "went to another app: \(Int(at.x)) across, \(Int(screen.frame.maxY - at.y)) down from the top")
+            }
+        }
+        monitors = [pointer, elsewhere, keys, clicks, away].compactMap { $0 }
+    }
+
+    /// Which of the panels over the page (the sidebar, the top bar) is where the event fell, if one is.
+    func panelOver(_ event: NSEvent) -> String? {
+        let point = root.convert(event.locationInWindow, from: nil)
+        if sidebar.alphaValue > 0.01, sidebar.frame.contains(point) { return "sidebar" }
+        if topBar.alphaValue > 0.01, topBar.frame.contains(point) { return "top bar" }
+        if let host = panelHost, host.frame.contains(point) { return "panel" }
+        if let host = omnibox, host.frame.contains(point) { return "address field" }
+        if let host = findHost, host.frame.contains(point) { return "find bar" }
+        return nil
     }
 
     /// Esc: the field over the page, else the address being edited.
     private func escape() -> Bool {
+        if let shot = scrollShot {
+            shot.cancel()
+            return true
+        }
         if peekView != nil {
             closePeek()
             return true
@@ -473,6 +524,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     private func pointer(at point: NSPoint) {
         let bounds = root.bounds
         reach(point)
+        // While a scrolling screenshot is taken the bars stay away (they would come over the part chosen).
+        if scrollShot != nil { return }
         if !shell.sidebarPinned {
             if point.x <= Metrics.edge, !shell.sidebarShown { arm(.side) } else { disarm(.side) }
             if shell.sidebarShown {
@@ -1028,7 +1081,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         shell.asking = ask
         newTabAtTop = atTop
         if omnibox == nil {
-            let host = hosting(OmniboxView(shell: shell, window: self))
+            let host = hosting(OmniboxView(shell: shell, window: self), solid: true)
             host.frame = root.bounds
             root.addSubview(host, positioned: .above, relativeTo: nil)
             omnibox = host
@@ -1043,6 +1096,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     var pendingGroup: TabGroup?
     /// A link's page peeked at over the one shown (Peek.swift), and the tab it was opened from.
     var peekView: PeekView?
+    /// A scrolling screenshot being taken (ScrollShot.swift).
+    var scrollShot: ScrollShot?
     weak var peekOpener: Tab?
 
     func dismissOmnibox() {
@@ -1135,7 +1190,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         if shell.panel == .popout, panel != .popout { endPopout() }
         shell.panel = panel
         panelHost?.removeFromSuperview()
-        let host = hosting(PanelView(shell: shell, window: self))
+        let host = hosting(PanelView(shell: shell, window: self), solid: true)
         host.frame = root.bounds
         root.addSubview(host, positioned: .above, relativeTo: nil)
         panelHost = host
@@ -1307,7 +1362,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         guard let web = shownWeb else { return }
         shell.finding = true
         if findHost == nil {
-            let host = hosting(FindBarView(state: shell.find, window: self))
+            let host = hosting(FindBarView(state: shell.find, window: self), solid: true)
             root.addSubview(host, positioned: .above, relativeTo: page)
             findHost = host
             layout(animated: false)
@@ -1387,6 +1442,24 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         board.setString(url.absoluteString, forType: .string)
         say(removed > 0 ? "Link copied, \(removed) tracking parameter\(removed == 1 ? "" : "s") removed" : "Link copied",
             actions: Share.actions(url, title: shell.selected?.title, in: self))
+    }
+
+    /// ⇧⌘S: a picture of as much of the page as is scrolled through (ScrollShot.swift).
+    @objc func startScrollingScreenshot(_ sender: Any?) {
+        guard scrollShot == nil, let web = shownWeb else { return }
+        let session = ScrollShot(window: self, web: web)
+        scrollShot = session
+        session.view.frame = pageView.frame
+        root.addSubview(session.view, positioned: .above, relativeTo: pageView)
+        session.begin()
+        // The bars that are out go, and none comes out at an edge until the screenshot is over; then the pointer
+        // at an edge brings them out as before.
+        disarm(.side)
+        disarm(.top)
+        if edgeToEdge { setEdgesAuto(false, covering: false, because: "scrolling screenshot") }
+        if !shell.sidebarPinned { shell.sidebarShown = false }
+        if !shell.topBarKept { shell.topBarShown = false }
+        layout(animated: true)
     }
 
     /// ⇧⌘R: the whole page, top to bottom, as a picture on the clipboard (PageShot.swift).
@@ -1630,6 +1703,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             // Any page may be tried; the ones that look like an article are the ones offered in the top bar.
             return tab?.isReading == true || (tab?.webView != nil && ["http", "https"].contains(tab?.url?.scheme ?? ""))
         case #selector(copyPageScreenshot(_:)): return tab?.webView != nil && tab?.url != nil && !shooting
+        case #selector(startScrollingScreenshot(_:)): return tab?.webView != nil && tab?.url != nil && scrollShot == nil
         case #selector(toggleAwake(_:)):
             item.title = Awake.shared.contains(tab?.url) ? "Let This Site Sleep" : "Keep This Site Awake"
             return tab?.url?.host() != nil
@@ -1908,6 +1982,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         // window over the Settings window for the moment the cover lasts, and
         // it came back after it (seen: "not key" in the log, then "hidden").
         guard edgeToEdge, NSApp.isActive, window?.isKeyWindow == true, let screen = window?.screen else { return }
+        // A scrolling screenshot runs to the top pixel: the menu bar and the Dock do not come out meanwhile.
+        if scrollShot != nil {
+            setEdgesAuto(false, covering: false, because: "scrolling screenshot")
+            return
+        }
         let frame = screen.frame
         let location = NSEvent.mouseLocation
         let fromTop = frame.maxY - location.y
@@ -2066,6 +2145,65 @@ struct MenuBarClock: View {
 }
 
 /// Shows the clock but lets every click through to the page under it.
+/// A hosting view that stands over the page and keeps every event that falls inside its frame. SwiftUI hands a
+/// mouse event that none of its views took (a click on the glass between two buttons, a scroll over a part with
+/// nothing to scroll) to the view behind, by calling the same method on it (`NSHostingView.mouseDown`, measured:
+/// it ended in the page's `WKWebView.mouseDown`), so a click on an empty part of the sidebar pressed a link of
+/// the page under it. Its answer to hitTest cannot stop that; the view it forwards to can: a ClickShield stands
+/// just below it, the same size, and the events that are forwarded end there.
+final class SolidHost<V: View>: NSHostingView<V> {
+    private var shield: ClickShield?
+    private var frameWatch: NSObjectProtocol?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let hit = super.hitTest(point) { return hit }
+        guard !isHidden, alphaValue > 0.01, bounds.contains(convert(point, from: superview)) else { return nil }
+        return self
+    }
+
+    override var isHidden: Bool {
+        didSet { shield?.isHidden = isHidden }
+    }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        shield?.removeFromSuperview()
+        shield = nil
+        frameWatch.map(NotificationCenter.default.removeObserver)
+        frameWatch = nil
+        guard let superview else { return }
+        let shield = ClickShield(frame: frame)
+        shield.isHidden = isHidden
+        superview.addSubview(shield, positioned: .below, relativeTo: self)
+        self.shield = shield
+        postsFrameChangedNotifications = true
+        frameWatch = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: self, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if let self { self.shield?.frame = self.frame } }
+        }
+    }
+}
+
+/// A view that takes every mouse event inside it and does nothing with it (see SolidHost).
+final class ClickShield: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isHidden || !bounds.contains(convert(point, from: superview)) ? nil : self
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func rightMouseUp(with event: NSEvent) {}
+    override func rightMouseDragged(with event: NSEvent) {}
+    override func otherMouseDown(with event: NSEvent) {}
+    override func otherMouseUp(with event: NSEvent) {}
+    override func otherMouseDragged(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+    override func magnify(with event: NSEvent) {}
+}
+
 final class ClockHost: NSHostingView<MenuBarClock> {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

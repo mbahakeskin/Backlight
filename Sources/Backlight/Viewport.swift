@@ -121,5 +121,9 @@ enum Viewport {
         #endif
         if let agent = tab.userAgent { web.customUserAgent = agent }
         if let look = tab.look { web.appearance = NSAppearance(named: look) }
+        // A page made again while it is in a frame: the inspector docks beside it as before.
+        if tab.stageSize != nil, let window = tab.host as? BrowserWindow {
+            DispatchQueue.main.async { MainActor.assumeIsolated { if tab === window.shell.selected { window.prepareInspector() } } }
+        }
     }
 }

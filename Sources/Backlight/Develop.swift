@@ -538,23 +538,28 @@ extension BrowserWindow {
     fileprivate static let looks: [NSAppearance.Name?] = [nil, .aqua, .darkAqua]
 
     @objc func showWebInspector(_ sender: Any?) {
+        prepareInspector()
         if !Develop.show("show", of: page) { NSSound.beep() }
     }
 
     @objc func showJavaScriptConsole(_ sender: Any?) {
+        prepareInspector()
         if !Develop.show("showConsole", of: page) { NSSound.beep() }
     }
 
     @objc func showPageSource(_ sender: Any?) {
+        prepareInspector()
         if !Develop.showSource(of: page) { NSSound.beep() }
     }
 
     @objc func selectElement(_ sender: Any?) {
+        prepareInspector()
         guard Develop.show("show", of: page) else { return NSSound.beep() }
         Develop.show("toggleElementSelection", of: page)
     }
 
     @objc func showPageResources(_ sender: Any?) {
+        prepareInspector()
         if !Develop.show("showResources", of: page) { NSSound.beep() }
     }
 

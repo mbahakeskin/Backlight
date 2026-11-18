@@ -22,7 +22,7 @@ enum AgentTools {
     /// Said to the agent once, when it connects.
     static let instructions = """
     Backlight is the person's own web browser, with their tabs and the sites they are signed in to. \
-    `tabs` lists what is open already: start with it when the task is about the person's own tabs; to go to an address, `open` it (that gives the tab's number). A tool that takes `tab` (a number from `tabs`) uses the tab shown in the front window when none is given. `help` gives any tool's whole description. \
+    `tabs` lists what is open already: start with it when the task is about the person's own tabs; to go to an address, `open` it (that gives the tab's number). A tool that takes `tab` (a number from `tabs`) uses, when none is given, the tab you opened last, and never the one the person is looking at: to work in one of their own tabs, give its number. `help` gives any tool's whole description. \
     To act on a page: if you know what the control says (the task names it, or a listing just showed it), `click`, `fill` and `type` take a `label` and find it when the call is made, so nothing needs reading first; otherwise read the page (`read_page` lists what can be clicked or filled, each with a ref number; `screenshot` shows it) and use the refs. \
     Unless they turned the asking off, the person is asked, in Backlight, before you read a site and again before you click or type there; if they say no, don't look for another way. \
     Pages that are files on this Mac (file://) are one site, "files on this Mac", asked about like any other. Private tabs are kept from you, and so is what is in password and card fields: ask the person to sign in or pay themselves. \
@@ -36,7 +36,7 @@ enum AgentTools {
     private static func tool(_ name: String, _ description: String, _ properties: [String: [String: Any]] = [:], required: [String] = [], reads: Bool = false) -> [String: Any] {
         var all = properties
         if all["tab"] == nil, !["tabs", "open", "batch", "history", "bookmarks", "downloads", "clipboard", "extensions", "features", "read_pages", "help", "settle"].contains(name) {
-            all["tab"] = ["type": "integer", "description": "The tab's number from `tabs`. Left out: the tab shown in the front window."]
+            all["tab"] = ["type": "integer", "description": "The tab's number from `tabs`. Left out: the tab you opened last (not the one the person is looking at: for one of theirs, give its number)."]
         }
         // What the acting tools take besides: a few words on the effect, for the person's list of what the agent did.
         if all["summary"] == nil, ["click", "hover", "drag", "type", "key", "scroll", "fill", "fill_form", "search", "upload", "dialog", "navigate", "close", "evaluate"].contains(name) {
@@ -82,7 +82,7 @@ enum AgentTools {
         tool("tabs", "The open tabs in every window: each one's number, title and address, which is shown, which are asleep, its group, and the other half of a split view. Private tabs are left out. Long addresses are cut; the numbers are the same however it is filtered.", [
             "from_tab": ["type": "integer", "description": "Only tabs from this number on (with `to_tab`: that range)."],
             "to_tab": ["type": "integer", "description": "Only tabs up to this number."],
-            "yours": ["type": "boolean", "description": "Only the tabs the agent opened or has worked in."],
+            "yours": ["type": "boolean", "description": "Only the tabs you opened (with `open`, or from a link in a page you worked in); not the person's own."],
             "query": ["type": "string", "description": "Only tabs with these words in their title or address."],
             "window": ["type": "integer", "description": "Only this window's (1 is the first listed)."],
             "full_urls": ["type": "boolean", "description": "Give the addresses whole."],
@@ -96,7 +96,7 @@ enum AgentTools {
         tool("close", "Closes a tab, several tabs (`tabs`), or all the tabs you opened (`yours`).", [
             "tab": ["type": "integer", "description": "The tab's number from `tabs`."],
             "tabs": ["type": "array", "items": ["type": "integer"], "maxItems": 30, "description": "Several tabs' numbers, closed in one call."],
-            "yours": ["type": "boolean", "description": "Close every tab you opened or were let into: the tidy-up at the end of a task, in one call."],
+            "yours": ["type": "boolean", "description": "Close every tab you opened (with `open`, or from a link in a page you worked in): the tidy-up at the end of a task, in one call. Tabs of the person's that you only read or worked in stay."],
         ]),
         tool("select", "Shows a tab to the person, in its window."),
         tool("navigate", "Takes a tab to an address, or back, forward, or loads it again; waits for the page.", [
@@ -108,7 +108,7 @@ enum AgentTools {
             "offset": ["type": "integer", "description": "Where to start, to read on through a long page."],
             "selector": ["type": "string", "description": "Only the text of what matches this CSS selector."],
             "main": ["type": "boolean", "description": "Only the page's main area (main, article…), without the menu and footer."],
-            "structured": ["type": "boolean", "description": "Not the text but what the page says it sells: name, brand, price, stock, rating and address of each product it declares (JSON-LD, microdata, meta tags); on a page that declares none, a guess from the cards that show a price."],
+            "structured": ["type": "boolean", "description": "Not the text but what the page says it sells: name, brand, price, stock, rating and address of each product it declares (JSON-LD, microdata, meta tags). A page that declares none gives none: it is not guessed from how the page looks."],
             "limit": ["type": "integer", "description": "With structured: how many products, 40 unless said, 200 at most."],
         ], reads: true),
         tool("read_page", "What is on the page, each thing that can be clicked or filled with its ref number, role, name and state. Use the refs with click, fill, type and the rest.", [
@@ -199,6 +199,9 @@ enum AgentTools {
             "urls": ["type": "array", "items": ["type": "string"], "description": "Addresses, http, https or a file on this Mac; 25 at most."],
             "max_chars": ["type": "integer", "description": "How much of each page's text, 6000 unless said, 30000 at most."],
             "links": ["type": "boolean", "description": "Also each page's links (up to 60: what they say and where they go), for finding the next pages to read."],
+            "main": ["type": "boolean", "description": "Only each page's main area, without the menu and footer (as in `read_text`)."],
+            "structured": ["type": "boolean", "description": "Not each page's text but the products it declares (as in `read_text`)."],
+            "limit": ["type": "integer", "description": "With structured: how many products from each page, 40 unless said."],
         ], required: ["urls"], reads: true),
         tool("upload", "Gives files from this Mac to a page's file field. The person is asked each time, with the files named.", [
             "ref": ["type": "integer", "description": "The file field, or the button that opens the file chooser."],
@@ -235,7 +238,8 @@ enum AgentTools {
             "limit": ["type": "integer", "description": "How many rows, 50 unless said, 500 at most."],
             "max_chars": ["type": "integer", "description": "How much to give, 8000 unless said."],
         ]),
-        tool("evaluate", "Runs JavaScript in the page and gives what it returns. Needs the developer tools turned on in Backlight's Settings › Agents.", [
+        tool("evaluate", "Runs JavaScript in the page and gives what it returns. It is given 20 seconds, or `timeout` (up to 120); one that runs out is not stopped in the page and gives nothing back, so a long job should keep what it has so far in a variable of the page (`globalThis.found = []`), return early, and be read again with another `evaluate`. Needs the developer tools turned on in Backlight's Settings › Agents.", [
+            "timeout": ["type": "number", "description": "Seconds to wait for the answer: 20 unless said, 120 at most."],
             "code": ["type": "string", "description": "The body of an async function: use `return` for the answer. Put values in `args` and read them as `args.name`, not inside the code's own text."],
             "args": ["type": "object", "description": "Values for the code, seen there as the object `args`: an address, a word, a list. They need no quoting inside the code."],
         ], required: ["code"]),
@@ -571,6 +575,17 @@ enum AgentTools {
         return lastNumber
     }
 
+    /// The tab the agent opened last, while it is open.
+    fileprivate static var lastOpened: UUID?
+
+    static func lastOpenedTab() -> Tab? {
+        guard let id = lastOpened else { return nil }
+        for window in Windows.all {
+            if let tab = window.shell.allTabs.first(where: { $0.id == id }) { return tab.isPrivate ? nil : tab }
+        }
+        return nil
+    }
+
     static func tab(numbered number: Int) -> Tab? {
         guard let id = numbered[number] else { return nil }
         for window in Windows.all {
@@ -602,14 +617,16 @@ private struct Call {
         return nil
     }
 
-    /// The tab meant: by its number, or the one shown in the front window.
+    /// The tab meant: by its number, or else the one the agent opened last. Never the one shown in the front window:
+    /// that is the person's, and a call that forgot the number would have read it.
     private func target() throws -> Tab {
         if let number = integer("tab") {
             guard let tab = AgentTools.tab(numbered: number) else { throw Refusal(message: "There is no tab \(number) now; `tabs` lists the ones there are.") }
             return tab
         }
-        guard let tab = Windows.front?.shell.selected else { throw Refusal(message: "No tab is open in Backlight; `open` makes one.") }
-        guard !tab.isPrivate else { throw Refusal(message: "The tab in front is a private one, which Backlight keeps from the agent. Give another tab's number.") }
+        guard let tab = AgentTools.lastOpenedTab() else {
+            throw Refusal(message: "Which tab? Give `tab` (a number from `tabs`), or `open` an address first: with no number a call goes to the tab you opened last, never to the one the person is looking at.")
+        }
         return tab
     }
 
@@ -788,6 +805,7 @@ private struct Call {
         for window in Windows.all {
             for other in window.shell.tabs where other.opener === tab && !other.isPrivate && !Call.toldOpened.contains(other.id) {
                 Call.toldOpened.insert(other.id)
+                if access.holds(tab) || tab.agentOpened { other.agentOpened = true }
                 let number = AgentTools.number(of: other)
                 lines.append("A new tab opened from this page: [\(number)] \(other.name) — \(other.url?.absoluteString ?? "loading")\(other.isLoading ? " (still loading)" : ""). Use tab \(number) to carry on there.")
             }
@@ -874,7 +892,7 @@ private struct Call {
                 all += 1
                 if let from, number < from { continue }
                 if let to, number > to { continue }
-                if flag("yours"), !access.holds(tab) { continue }
+                if flag("yours"), !tab.agentOpened { continue }
                 let address = tab.url?.absoluteString ?? "empty"
                 let hay = (tab.name + " " + address).lowercased()
                 if !words.allSatisfy({ hay.contains($0) }) { continue }
@@ -886,7 +904,7 @@ private struct Call {
                 if let split = window.shell.split, split.contains(tab) { notes.append("split view with [\(AgentTools.number(of: split.other(than: tab)))]") }
                 if tab.isUnloaded || tab.isFrozen || tab.webView == nil { notes.append("asleep") }
                 if tab.isLoading { notes.append("loading") }
-                if access.holds(tab) { notes.append("yours") }
+                if tab.agentOpened { notes.append("yours") } else if access.holds(tab) { notes.append("you worked in it") }
                 // An address of a hundred characters is a login redirect or a tracker, rarely what was meant.
                 let shown = flag("full_urls") || address.count <= 100 ? address : String(address.prefix(80)) + "… (\(address.count) characters)"
                 rows.append("  [\(number)] \(tab.name) — \(shown)\(notes.isEmpty ? "" : " (\(notes.joined(separator: ", ")))")")
@@ -958,6 +976,8 @@ private struct Call {
             window.insert(tab, after: nil, select: flag("front"))
         }
         access.hold(tab)
+        tab.agentOpened = true
+        AgentTools.lastOpened = tab.id
         tab.load(url)
         var listing = "", languageNote = ""
         if let web = tab.webView {
@@ -975,7 +995,7 @@ private struct Call {
         if flag("yours") || arguments["tabs"] != nil {
             var chosen: [Tab] = []
             if flag("yours") {
-                for window in Windows.all { for tab in window.shell.allTabs where !tab.isPrivate && access.holds(tab) { chosen.append(tab) } }
+                for window in Windows.all { for tab in window.shell.allTabs where !tab.isPrivate && tab.agentOpened { chosen.append(tab) } }
             }
             for number in (arguments["tabs"] as? [Any] ?? []).compactMap({ ($0 as? NSNumber)?.intValue ?? ($0 as? String).flatMap(Int.init) }) {
                 guard let tab = AgentTools.tab(numbered: number) else { throw Refusal(message: "There is no tab \(number) now; `tabs` lists the ones there are.") }
@@ -1649,6 +1669,7 @@ private struct Call {
         // Together they stay within what can be read in one go.
         let perPage = min(min(max(integer("max_chars") ?? 6000, 500), 30000), 150_000 / urls.count)
         let wantLinks = flag("links")
+        let reading = PageReading(main: flag("main"), structured: flag("structured"), limit: min(max(integer("limit") ?? 40, 1), 200))
         let window = Windows.front ?? Windows.open(empty: true)
         // Asked about first, a site at a time, so the questions don't come together.
         var results = Array(repeating: "", count: urls.count)
@@ -1675,7 +1696,7 @@ private struct Call {
             var waiting = jobs[...]
             func begin() {
                 guard let job = waiting.popFirst() else { return }
-                group.addTask { await self.readOne(job.index, job.url, in: window, perPage: perPage, links: wantLinks, lean: lean) }
+                group.addTask { await self.readOne(job.index, job.url, in: window, perPage: perPage, links: wantLinks, reading: reading, lean: lean) }
             }
             for _ in 0..<width { begin() }
             while let finished = await group.next() {
@@ -1687,7 +1708,10 @@ private struct Call {
     }
 
     /// One page of `read_pages`: opened in a tab of its own, read, closed.
-    private func readOne(_ index: Int, _ url: URL, in window: BrowserWindow, perPage: Int, links: Bool, lean: WKContentRuleList?) async -> (Int, String) {
+    /// What `read_pages` takes of each page.
+    private struct PageReading: Sendable { let main: Bool, structured: Bool, limit: Int }
+
+    private func readOne(_ index: Int, _ url: URL, in window: BrowserWindow, perPage: Int, links: Bool, reading: PageReading, lean: WKContentRuleList?) async -> (Int, String) {
         let title = "## [\(index + 1)] \(url.absoluteString)"
         let tab = Tab(privately: false, opening: url)
         window.insert(tab, after: nil, select: false)
@@ -1716,7 +1740,9 @@ private struct Call {
         do {
             // Where it has got to may be another site.
             try await access.permit(.read, in: tab, for: client)
-            let text = try await script("return __agent.text(0, max);", ["max": perPage], in: web) as? String ?? ""
+            let text = reading.structured
+                ? try await script("return __agent.structured(limit);", ["limit": reading.limit], in: web) as? String ?? ""
+                : try await script("return __agent.text(0, max, options);", ["max": perPage, "options": ["main": reading.main]], in: web) as? String ?? ""
             var out = title + "\n" + text
             if links, let list = try await script("return __agent.links(60);", in: web) as? [String], !list.isEmpty {
                 out += "\n\nLinks:\n" + list.joined(separator: "\n")
@@ -2334,7 +2360,9 @@ private struct Call {
             guard args is [String: Any] || args is [Any] else { throw Refusal(message: "`args` is an object (or a list) of the values the code uses, seen there as `args`.") }
             values["args"] = args
         }
-        let value = try await script(string("code") ?? "", values, in: web, world: .page, timeout: 20)
+        // 20 seconds unless asked: a page that is busy is told so rather than waited on for ever.
+        let seconds = min(max(number("timeout") ?? 20, 1), 120)
+        let value = try await script(string("code") ?? "", values, in: web, world: .page, timeout: seconds)
         return .text(format(value) + (tab.dialog.map { "\nThe page now asks (\($0.kind)): \"\($0.message)\"." } ?? ""))
     }
 

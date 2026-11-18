@@ -84,6 +84,7 @@ enum Menus {
         asIs.isAlternate = true
         menu.addItem(asIs)
         menu.addItem(item("Copy Page Screenshot", #selector(BrowserWindow.copyPageScreenshot(_:)), "r", [.command, .shift]))
+        menu.addItem(item("Scrolling Screenshot…", #selector(BrowserWindow.startScrollingScreenshot(_:)), "s", [.command, .shift]))
         menu.addItem(.separator())
         let find = item("Find", nil)
         let sub = NSMenu(title: "Find")

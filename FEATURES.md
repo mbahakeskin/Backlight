@@ -129,6 +129,20 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   wait to be scrolled to are asked for first, the page is put back where it was,
   and the drawing runs off the main thread within a pixel budget (a very long
   page is drawn at less than full density, and says so).
+- `⇧⌘S` (Edit › Scrolling Screenshot…) is for the part of a page you scroll through:
+  drag over the part to capture (a click or Return takes all of the view), scroll as
+  far as you like, up and down, then Return (or Done) puts it together as one picture
+  on the clipboard (Save in the toast puts it in Downloads); Esc leaves it. The page
+  says how far it has scrolled, so the pictures are checked against that and not
+  searched for a fit (a page that cannot say, such as a frame of another site, is
+  looked at by comparing the pictures); what sticks to the window, a header or a
+  button in a corner, comes once, at the ends of the page; and a scroll that goes
+  further than the part is high is taken back over the gap. The scroll is slowed
+  while it is on, the sidebar and the top bar (and, in Backlight's own full screen,
+  the menu bar and the Dock) do not come out at the edges, and rows already captured
+  show as a lighter column. macOS keeps the very top row of the screen for itself:
+  begin a row lower, or drag up to the edge. The picture is limited to the same pixel
+  budget as `⇧⌘R`'s.
 - Reader (`⌥⌘R`, and a button in the top bar when the page has an article):
   the article on its own, light, sepia, dark or following the system, serif or
   sans, five sizes, three widths. The page is read, never touched: a script
@@ -542,9 +556,10 @@ The tools:
   JSON-LD, microdata, meta tags), and none for a page that declares none: a
   guess from the cards that show a price gave "Site Logo, 1,500 TL" for a
   product, so it is gone. `read_text` gives a line the page repeats once, marked
-  (×N), says when a page is mostly pictures with little text, and with `ocr`
-  also reads the text in the pictures on screen (macOS's own recogniser; the
-  first use after launch loads its model, which can take half a minute);
+  (×N), and says when a page is mostly pictures with little text, so that the
+  agent looks at it (`screenshot`) instead of reading an empty page: the agent
+  reads a picture itself, which makes a text recogniser of Backlight's own
+  (tried: its model took half a minute to load the first time) unnecessary;
   `read_pages` takes `main` and `structured` too. `evaluate` takes `timeout`
   (20 seconds, 120 at most). `open` and `navigate` list the first 15 controls.
 - `upload` (you are asked each time, with the files named), `dialog` (a

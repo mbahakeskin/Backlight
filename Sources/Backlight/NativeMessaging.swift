@@ -39,6 +39,9 @@ enum NativeHosts {
         ]
     }
 
+    /// What an extension's worker connects to, first of all and for a moment, each time it starts (Extensions.fixes).
+    static let workerStarted = "backlight.worker"
+
     /// The manifest for `name` that lets `origin` in, if any.
     static func manifest(_ name: String, for origin: String) -> Manifest? {
         // Chrome's rule for host names; it also keeps the name to one file.
@@ -96,6 +99,8 @@ enum NativeHosts {
 /// One running helper and the pipes to it.
 final class NativeConnection {
     let name: String
+    /// The extension that opened it.
+    var owner: String?
     private let process = Process()
     private let input = Pipe()
     private let output = Pipe()
@@ -124,10 +129,19 @@ final class NativeConnection {
             throw NativeHosts.Refused.failed("\(name) didn't start: \(error.localizedDescription)")
         }
         Debug.log("native", "\(name): started")
+        // The helper has its own copies of the ends that are its (its input's reading end, its output's and
+        // errors' writing ends); these ours are closed. Left open here, the helper's exit never came as the
+        // end of its output, so the two threads below waited for ever and kept their pipes: two descriptors
+        // and two threads lost for each helper started.
+        try? input.fileHandleForReading.close()
+        try? output.fileHandleForWriting.close()
+        try? errors.fileHandleForWriting.close()
         // What the helper says of itself going wrong, kept for the log: one
         // that can't reach its app (not running, say) says why here and ends.
         let complaints = errors.fileHandleForReading
         Thread.detachNewThread {
+            // Its reading end goes with it: a descriptor kept by a connection that nothing lets go of is lost.
+            defer { try? complaints.close() }
             var tail = Data()
             while true {
                 let more = complaints.availableData
@@ -145,6 +159,7 @@ final class NativeConnection {
         let reader = output.fileHandleForReading
         // Blocking reads, off the main thread: a length, then that much JSON.
         Thread.detachNewThread { [weak self] in
+            defer { try? reader.close() }
             while true {
                 let head = reader.readData(ofLength: 4)
                 guard head.count == 4 else { break }

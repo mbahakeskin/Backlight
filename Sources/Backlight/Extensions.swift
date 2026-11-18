@@ -659,6 +659,11 @@ final class Extensions: NSObject, WKWebExtensionControllerDelegate {
     ///   launch) is skipped, and session rules are applied in the background,
     ///   in order, with getSessionRules waiting for them, so an extension
     ///   isn't held up for the compiling.
+    /// - A worker says when it starts: a native port to `backlight.worker`, opened first of all and ended
+    ///   at once. WebKit does not always tell Backlight that a port is gone when it ends an idle worker, and
+    ///   Bitwarden opens two of them each time its worker wakes (every minute): the helpers they started
+    ///   were never ended (90 of them in a day and a half, then "Too many open files"). On that sign the
+    ///   helpers the extension's earlier workers started are ended.
     /// - A worker's WebSocket is Backlight's. WebKit runs an extension's
     ///   worker on its process's main thread, and a worker's WebSocket waits
     ///   for the main thread to open it: the process locks up for about a
@@ -682,7 +687,7 @@ final class Extensions: NSObject, WKWebExtensionControllerDelegate {
     /// (After Search's ExtensionShims.swift, Office Commun, MIT.)
     /// Which version of the fixes a file carries; with the debug log on, a
     /// version that also reports to it (see Debug.swift).
-    private static var marker: String { "/* Backlight: extension fixes 26\(Debug.enabled ? " debug" : "") */" }
+    private static var marker: String { "/* Backlight: extension fixes 27\(Debug.enabled ? " debug" : "") */" }
     /// One line, so a later version can take this one's place.
     private static var fixes: String { (marker + #"""
     (()=>{for(const n of["dispose","asyncDispose"]){if(typeof Symbol[n]!=="symbol")Object.defineProperty(Symbol,n,{value:Symbol.for("Symbol."+n)})}
@@ -709,6 +714,7 @@ final class Extensions: NSObject, WKWebExtensionControllerDelegate {
     }
     for(const ns of NS){const space=pin(self,ns);const runtime=space&&pin(space,"runtime");if(!runtime)continue;for(const name of["onUpdateAvailable","onRestartRequired","onSuspend","onSuspendCanceled"]){if(runtime[name])continue;const ls=new Set();try{Object.defineProperty(runtime,name,{value:{addListener:f=>{ls.add(f)},removeListener:f=>{ls.delete(f)},hasListener:f=>ls.has(f),hasListeners:()=>ls.size>0},configurable:true,writable:true})}catch(e){}}if(typeof runtime.requestUpdateCheck!=="function")try{Object.defineProperty(runtime,"requestUpdateCheck",{value:(cb)=>{const r={status:"no_update"};if(typeof cb==="function"){cb(r.status,{});return}return Promise.resolve(r)},configurable:true,writable:true})}catch(e){}}
     if(worker)for(const ns of NS){const space=pin(self,ns);const runtime=space&&pin(space,"runtime");const ext=space&&pin(space,"extension");const tabs=space&&pin(space,"tabs");if(!runtime)continue;const views=ext&&typeof ext.getViews==="function"?ext.getViews.bind(ext):null;if(views)try{Object.defineProperty(ext,"getViews",{value:()=>[],configurable:true,writable:true})}catch(e){}if(typeof runtime.getContexts!=="function")try{Object.defineProperty(runtime,"getContexts",{configurable:true,writable:true,value:async(filter)=>{const base=runtime.getURL("");const origin=base.replace(/\/$/,"");const out=[{contextType:"BACKGROUND",contextId:"background",tabId:-1,windowId:-1,frameId:-1,documentUrl:self.location.href,documentOrigin:origin,incognito:false}];try{if(views&&views({type:"popup"}).length>0)out.push({contextType:"POPUP",contextId:"popup",tabId:-1,windowId:-1,frameId:-1,documentUrl:base,documentOrigin:origin,incognito:false})}catch(e){}try{if(tabs)for(const t of await tabs.query({}))if(t.url&&t.url.startsWith(base))out.push({contextType:"TAB",contextId:"tab-"+t.id,tabId:t.id,windowId:t.windowId,frameId:0,documentUrl:t.url,documentOrigin:origin,incognito:!!t.incognito})}catch(e){}const f=filter||{};const has=(k,v)=>!Array.isArray(f[k])||f[k].includes(v);return out.filter(c=>has("contextTypes",c.contextType)&&has("contextIds",c.contextId)&&has("tabIds",c.tabId)&&has("windowIds",c.windowId)&&has("frameIds",c.frameId)&&has("documentUrls",c.documentUrl)&&has("documentOrigins",c.documentOrigin)&&(f.incognito===undefined||f.incognito===c.incognito))}})}catch(e){}}
+    if(worker){for(const ns of NS){const space=pin(self,ns);const rt=space&&pin(space,"runtime");if(!rt||typeof rt.connectNative!=="function")continue;try{const sign=rt.connectNative("backlight.worker");setTimeout(()=>{try{sign.disconnect()}catch(e){}},0)}catch(e){}break}}
     if(worker&&typeof self.WebSocket!=="undefined"){const rt=pin(pin(self,"chrome")||{},"runtime");if(rt&&typeof rt.connectNative==="function"){const connectNative=rt.connectNative.bind(rt);
     const enc=(b)=>{let s="";for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s)};const dec=(t)=>{const s=atob(t),b=new Uint8Array(s.length);for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i);return b.buffer};
     class WebSocket extends EventTarget{#port;#state=0;#queue=Promise.resolve();#origin;#hello;
@@ -747,23 +753,32 @@ final class Extensions: NSObject, WKWebExtensionControllerDelegate {
         .replacingOccurrences(of: "__PORT__", with: String(Debug.port))
         .replacingOccurrences(of: "__CHROME__", with: Crx.chromeVersion) + "\n" }
 
+    /// What every version of the fixes begins with: the app's name then (BasicShell, before 0.9.0) or now.
+    private static let markerStarts = ["/* Backlight: extension fixes", "/* BasicShell: extension fixes"]
+
     /// Puts the fixes first in every script the extension ships, replacing
-    /// an older version of them.
+    /// any older version of them. Each version is one line that begins with
+    /// its marker, so every such line at the top goes, whichever app name it
+    /// carries: after the rename the BasicShell ones were not recognised, a
+    /// second copy went in front of them, and the old one (which asks for a
+    /// native app, `basicshell.socket`, that is gone) ran after the new.
     static func patch(_ folder: URL) throws {
         let files = FileManager.default
         guard let walker = files.enumerator(at: folder, includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey]) else { return }
         for case let file as URL in walker where ["js", "mjs"].contains(file.pathExtension.lowercased()) {
             let values = try? file.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
             guard values?.isRegularFile == true, values?.isSymbolicLink != true,
-                  var text = try? String(contentsOf: file, encoding: .utf8),
-                  !text.hasPrefix(marker)
+                  let text = try? String(contentsOf: file, encoding: .utf8)
             else { continue }
-            // An older version: everything up to the end of its first line.
-            if text.hasPrefix("/* Backlight:"), let end = text.firstIndex(of: "\n") {
-                text = String(text[text.index(after: end)...])
+            var body = Substring(text)
+            var copies = 0
+            while markerStarts.contains(where: body.hasPrefix), let end = body.firstIndex(of: "\n") {
+                body = body[body.index(after: end)...]
+                copies += 1
             }
-            text = fixes + text
-            try text.write(to: file, atomically: true, encoding: .utf8)
+            // This version, once, and nothing older behind it: as it should be.
+            if copies == 1, text.hasPrefix(marker) { continue }
+            try (fixes + body).write(to: file, atomically: true, encoding: .utf8)
         }
     }
 
@@ -897,18 +912,34 @@ final class Extensions: NSObject, WKWebExtensionControllerDelegate {
     private var native: [ObjectIdentifier: NativeConnection] = [:]
 
     func webExtensionController(_ controller: WKWebExtensionController, connectUsing port: WKWebExtension.MessagePort, for extensionContext: WKWebExtensionContext, completionHandler: @escaping ((any Error)?) -> Void) {
-        if port.applicationIdentifier == ExtensionSocket.name {
+        let host = port.applicationIdentifier ?? ""
+        if host == ExtensionSocket.name {
             ExtensionSocket.connect(port, for: extensionContext)
             return completionHandler(nil)
         }
+        let owner = extensionContext.uniqueIdentifier
+        // A worker of the extension has started (see Extensions.fixes): what its earlier ones opened has
+        // no one left to talk to it.
+        if host == NativeHosts.workerStarted {
+            for old in Array(native.values) where old.owner == owner {
+                Debug.log("native", "\(old.name): ended, its worker is gone")
+                old.close()
+            }
+            port.disconnect()
+            return completionHandler(nil)
+        }
         do {
-            let connection = try NativeHosts.open(port.applicationIdentifier ?? "", for: extensionContext)
+            let connection = try NativeHosts.open(host, for: extensionContext)
+            connection.owner = owner
             let key = ObjectIdentifier(connection)
             native[key] = connection
             connection.onMessage = { message in port.sendMessage(message, completionHandler: nil) }
             connection.onClose = { [weak self] in
                 self?.native[key] = nil
                 if !port.isDisconnected { port.disconnect() }
+                // The port holds these, and they hold the connection: let go, or neither is ever freed.
+                port.messageHandler = nil
+                port.disconnectHandler = nil
             }
             port.messageHandler = { message, _ in
                 MainActor.assumeIsolated { if let message { connection.send(message) } }

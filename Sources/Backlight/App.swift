@@ -93,9 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func open(_ urls: [URL]) {
         if !Session.restored { Session.restore() }
-        let window = Windows.front ?? Windows.open(empty: true)
+        // A window on the desktop shown first; else the front one, wherever it is, and the person is taken there.
+        let here = NSApp.orderedWindows.lazy.compactMap { $0.windowController as? BrowserWindow }.first { $0.window?.isOnActiveSpace == true }
+        let window = here ?? Windows.front ?? Windows.open(empty: true)
         for url in urls { window.open(url, select: true) }
-        window.window?.makeKeyAndOrderFront(nil)
+        window.bringToFront()
     }
 
     // MARK: - menu actions that need no window

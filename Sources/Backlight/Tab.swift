@@ -117,6 +117,10 @@ final class Tab: NSObject, Identifiable {
     /// Touch events are made for its pages (TouchEmulation.swift), and the script that does it.
     @ObservationIgnored var touch = false
     @ObservationIgnored var touchScript: WKUserScript?
+    /// YouTube stopped a video in this tab under Chrome's agent: Safari's here from now on (YouTubeGuard).
+    @ObservationIgnored var youTubeAsSafari = false
+    /// The script that tells YouTube's page script the truth while its servers are told "Chrome" (SiteDevelop.scriptTruth).
+    @ObservationIgnored var scriptTruth: (script: WKUserScript, controller: WKUserContentController)?
     // What the agent tools keep with a tab (see Agent.swift).
     /// Its number, as the agent knows it.
     @ObservationIgnored var agentNumber: Int?
@@ -239,6 +243,7 @@ final class Tab: NSObject, Identifiable {
         webView = web
         Dusk.shared.arm(self, for: url)
         MediaDownload.shared.arm(self, for: url)
+        YouTubeGuard.shared.arm(self, for: url)
         Viewport.apply(to: self, web)
         Develop.apply(to: self, web)
         // Clear until the page first draws something, over the window's own
@@ -373,6 +378,29 @@ final class Tab: NSObject, Identifiable {
         isUnloaded = true
     }
 
+    /// Its sound stopped: the page muted, and each video and sound in it muted, paused and its source taken away.
+    /// Said while the page is still in its window: once out of it, WebKit slows the page's process, and the page
+    /// heard all this only 3.5 s later, the video playing on meanwhile (measured, Instagram; "the sound goes on for
+    /// 3-4 seconds after the tab is closed", reported). A source taken away ends the player there and then, what it
+    /// had queued with it; muted and paused only, a player may unmute and play its video again by itself.
+    func silence() {
+        guard !silenced, let web = webView else { return }
+        silenced = true
+        let mute = Selector(("_setPageMuted:"))
+        if web.responds(to: mute) {
+            typealias SetMuted = @convention(c) (AnyObject, Selector, UInt) -> Void
+            unsafeBitCast(web.method(for: mute), to: SetMuted.self)(web, mute, 1) // WKMediaMutedState audio
+        }
+        let quiet = """
+        document.querySelectorAll('video,audio').forEach(m => {
+          try { m.muted = true; m.volume = 0; m.pause(); m.removeAttribute('src'); m.srcObject = null; m.load(); } catch (e) {}
+        })
+        """
+        web.evaluateJavaScript(quiet, in: nil, in: .defaultClient) { _ in }
+        web.pauseAllMediaPlayback(completionHandler: nil)
+    }
+    @ObservationIgnored private var silenced = false
+
     /// Lets the page go: its process ends.
     func discard() {
         watching = []
@@ -382,6 +410,11 @@ final class Tab: NSObject, Identifiable {
         webView?.stopLoading()
         webView?.navigationDelegate = nil
         webView?.uiDelegate = nil
+        silence()
+        if let web = webView {
+            let selector = Selector(("_close"))
+            if web.responds(to: selector) { web.perform(selector) }
+        }
         webView?.removeFromSuperview()
         webView = nil
     }
@@ -445,6 +478,7 @@ extension Tab: WKNavigationDelegate {
         if action.targetFrame?.isMainFrame ?? true, ["http", "https"].contains(scheme) {
             Dusk.shared.arm(self, for: url)
             MediaDownload.shared.arm(self, for: url)
+            YouTubeGuard.shared.arm(self, for: url)
         }
         decisionHandler(.allow, preferences)
     }

@@ -68,6 +68,11 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
 - Import (Settings › Import, File menu): bookmarks and all of the
   history from Chrome and what is built on it, Safari and Firefox; and, from
   Chrome and its kin, a password file (CSV) to hand to a password manager.
+- YouTube is told it is Safari, what Backlight is. Settings › Tabs can tell it
+  Chrome instead, for its Download (Premium); on accounts where YouTube checks
+  the browser, it then stops videos at about 0:45, and the tab goes back to
+  Safari by itself, the video going on where it stopped. An experimental switch
+  tells only YouTube's servers Chrome and the page's script the truth.
 - Ads and trackers, YouTube's ads included, are blocked by uBlock Origin
   Lite, the Safari extension that comes with its app from the App Store.
   Backlight adds it when that app is on the Mac, running it from a copy of
@@ -131,11 +136,15 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   and the pill says how many parameters came off. The pill that says so holds two buttons for
   a moment: a QR code of the address (a card under the pill, "Copy Image" for
   the code as a picture) and AirDrop.
-- `⇧⌘R` copies the whole page, top to bottom, as one picture. Pictures that
+- `⇧⌘S` asks which screenshot, on a pill with the keyboard on it (1, 2 or 3,
+  or the arrows and Return; Esc cancels): what is in view, the whole page, or
+  a part you choose and scroll through. All three go to the clipboard.
+- `⇧⌘R` reloads the page without the cache (`⌘R` is the ordinary reload).
+- The whole page (Edit › Copy Page Screenshot) is copied top to bottom as one picture. Pictures that
   wait to be scrolled to are asked for first, the page is put back where it was,
   and the drawing runs off the main thread within a pixel budget (a very long
   page is drawn at less than full density, and says so).
-- `⇧⌘S` (Edit › Scrolling Screenshot…) is for the part of a page you scroll through:
+- The scrolling one (Edit › Scrolling Screenshot…) is for the part of a page you scroll through:
   drag over the part to capture (a click or Return takes all of the view), scroll as
   far as you like, up and down, then Return (or Done) puts it together as one picture
   on the clipboard (Save in the toast puts it in Downloads); Esc leaves it. The page
@@ -148,7 +157,7 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   the menu bar and the Dock) do not come out at the edges, and rows already captured
   show as a lighter column. macOS keeps the very top row of the screen for itself:
   begin a row lower, or drag up to the edge. The picture is limited to the same pixel
-  budget as `⇧⌘R`'s.
+  budget as the whole page's.
 - Reader (`⌥⌘R`, and a button in the top bar when the page has an article):
   the article on its own, light, sepia, dark or following the system, serif or
   sans, five sizes, three widths. The page is read, never touched: a script
@@ -158,7 +167,7 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   that lets in nothing but pictures. Only a page that has an article offers it
   (a front page, a list, a bot check do not), found once the page has loaded,
   in a few milliseconds. Esc closes it; Find, links (`⌘`-click for a new tab)
-  and `⇧⌘R` work in it.
+  and the screenshots work in it.
 - Dark pages (Settings › General, off until turned on): a page that stays
   white while macOS is dark gets dark colours of its own, pictures untouched;
   a site that already has a dark look is left alone, which is measured, not

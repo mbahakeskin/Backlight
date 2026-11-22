@@ -60,22 +60,71 @@ final class SiteDevelop {
     /// to Chrome. Told "Chrome", the page's menu has Download (measured on
     /// 2026-11-12: the video's menu has "İndir" with this agent and only
     /// "Bildir" with Safari's; the file is kept by the page, in the browser,
-    /// as it is in Chrome). Settings › Tabs has the switch.
+    /// as it is in Chrome). Settings › Tabs has the switch, off unless turned
+    /// on: told "Chrome", YouTube sends Chrome's player too, and videos stalled
+    /// or the page stopped answering after a while (issue #1, reported by two
+    /// people, not seen here). Telling only the page's script "Chrome" (navigator
+    /// and userAgentData, the requests left Safari's) kept videos playing but
+    /// brought no Download: YouTube puts it in the page it sends for the agent
+    /// of the request (measured on a Premium account, 2026-11-22).
     static let youTubeKey = "youtube.chromeAgent"
     static let youTubeAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
-    static func builtIn(_ host: String) -> DevelopSettings? {
+    static var chromeAgentOn: Bool { UserDefaults.standard.object(forKey: youTubeKey) as? Bool ?? false }
+
+    /// Experimental, with "Chrome" on: YouTube's servers are told "Chrome" (they send Download with the page) and the
+    /// page's script is told the truth, Safari, which is what BotGuard finds the engine to be. The stop at 0:45 comes
+    /// from that check seeing "Chrome" in a WebKit page (YouTubeGuard); whether one consistent to the script is enough,
+    /// with the page's own data still saying Chrome, can only be seen on an account YouTube checks: none here is.
+    static let youTubeTruthKey = "youtube.chromeAgent.scriptSafari"
+    static var scriptTruthOn: Bool { chromeAgentOn && UserDefaults.standard.bool(forKey: youTubeTruthKey) }
+
+    /// What WebKit says it is in Backlight, with no agent of the tab's own.
+    static var ownAgent: String { "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) \(Web.userAgentName)" }
+
+    /// The page script's `navigator` back to the truth while the tab tells YouTube "Chrome" (youTubeTruthKey).
+    @MainActor
+    static func scriptTruth(_ tab: Tab, for host: String) {
+        guard let web = tab.webView else { return }
+        let controller = web.configuration.userContentController
+        let wanted = isYouTube(host) && scriptTruthOn && tab.userAgent == youTubeAgent
+        if let truth = tab.scriptTruth, !wanted || truth.controller !== controller {
+            let remove = NSSelectorFromString("_removeUserScript:")
+            if truth.controller.responds(to: remove) { _ = truth.controller.perform(remove, with: truth.script) }
+            tab.scriptTruth = nil
+        }
+        guard wanted, tab.scriptTruth == nil else { return }
+        let agent = ownAgent
+        let source = """
+        (() => {
+          const agent = \(String(reflecting: agent));
+          for (const [key, value] of [["userAgent", agent], ["appVersion", agent.slice("Mozilla/".length)]]) {
+            try { Object.defineProperty(Navigator.prototype, key, { get: () => value, configurable: true, enumerable: true }); } catch (e) {}
+          }
+        })();
+        """
+        let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)
+        controller.addUserScript(script)
+        tab.scriptTruth = (script, controller)
+    }
+
+    static func isYouTube(_ host: String) -> Bool {
         let host = host.lowercased()
-        guard host == "youtube.com" || host.hasSuffix(".youtube.com"),
-              UserDefaults.standard.object(forKey: youTubeKey) as? Bool ?? true else { return nil }
+        return host == "youtube.com" || host.hasSuffix(".youtube.com")
+    }
+
+    /// `tab`: one YouTube stopped under Chrome's agent stays Safari (YouTubeGuard).
+    static func builtIn(_ host: String, for tab: Tab? = nil) -> DevelopSettings? {
+        guard isYouTube(host), chromeAgentOn, tab?.youTubeAsSafari != true else { return nil }
         return DevelopSettings(userAgent: youTubeAgent)
     }
 
     /// A tab is about to go to `host` (decided on before its request is made, so the settings reach it).
     @MainActor
     func prepare(_ tab: Tab, for host: String) {
+        defer { Self.scriptTruth(tab, for: host) }
         guard !tab.isPrivate, tab.developHost != host else { return }
-        if let saved = sites[host] ?? Self.builtIn(host) {
+        if let saved = sites[host] ?? Self.builtIn(host, for: tab) {
             tab.developHost = host
             apply(saved, to: tab)
         } else if tab.developHost != nil {

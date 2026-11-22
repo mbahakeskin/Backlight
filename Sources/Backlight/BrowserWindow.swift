@@ -98,7 +98,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     var splitDivider: SplitDivider?
     var splitFocus: SplitFocusFrame?
     var splitMonitor: Any?
-    /// A full-page screenshot is being made (⇧⌘R): one at a time.
+    /// A screenshot is being made: one at a time.
     private var shooting = false
     private var empty: NSHostingView<EmptyPage>!
     private var loading: LoadingHost!
@@ -902,8 +902,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         if let current = shell.selected, current !== tab {
             // The page under a reader is hidden; it is shown for its picture to be taken.
             if current.isReading { current.webView?.isHidden = false }
-            // A video playing in it goes into Picture in Picture (PiP.swift).
-            PiP.follow(current)
+            // A video playing in it goes into Picture in Picture (PiP.swift); not in a tab being closed: on its way
+            // there the video went on playing for a couple of seconds after the tab was gone (reported, Instagram).
+            if current !== closing { PiP.follow(current) }
             // Out of the window, WebKit freezes the page (see Sleep.swift); a
             // site kept awake, or one whose video is in Picture in Picture,
             // stays in it, hidden, and is only throttled. The page leaves once
@@ -1049,6 +1050,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         return shell.tabs.indices.contains(index) ? shell.tabs[index] : shell.tabs.last
     }
 
+    /// The tab being closed while the next one is chosen.
+    private weak var closing: Tab?
+
     func close(_ tab: Tab) {
         // The popup of an extension asked to close itself (window.close()).
         if tab === shell.popout?.tab { return closePopout() }
@@ -1062,12 +1066,16 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             return
         }
         guard let index = shell.tabs.firstIndex(of: tab) else { return }
+        // Before anything takes the page out of the window (Tab.silence).
+        tab.silence()
         if shell.split?.contains(tab) == true { endSplit() }
         PiP.forget(tab)
         Extensions.shared.closed(tab)
         Closed.add(tab)
         shell.tabs.remove(at: index)
         if shell.selected === tab {
+            closing = tab
+            defer { closing = nil }
             select(tabAfterLeaving(tab, at: index))
         } else {
             recent.removeAll { $0 == tab.id }
@@ -1082,6 +1090,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         Archive.shared.add(tab)
         shell.tabs.remove(at: index)
         if shell.selected === tab {
+            closing = tab
+            defer { closing = nil }
             select(tabAfterLeaving(tab, at: index))
         } else {
             recent.removeAll { $0 == tab.id }
@@ -1265,6 +1275,20 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         window?.makeKeyAndOrderFront(nil)
     }
 
+    /// In front and the desktop it is on shown. On another desktop, ordering it front left the person where they were
+    /// with the app active and nothing to see (a link from another app seemed not to open, reported); there it is
+    /// shown again through activation, which takes macOS to the desktop of the app's key window. In Backlight's own
+    /// full screen that desktop is the anchor's, whose window is the one macOS goes to.
+    func bringToFront() {
+        guard let window else { return }
+        window.makeKeyAndOrderFront(nil)
+        guard !window.isOnActiveSpace else { return }
+        anchor?.orderFront()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.deactivate()
+        DispatchQueue.main.async { NSApp.activate(ignoringOtherApps: true) }
+    }
+
     func closePanel() {
         if shell.panel == .popout { endPopout() }
         panelHost?.removeFromSuperview()
@@ -1382,7 +1406,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         case 124: shell.toastFocus = min(count - 1, focus + 1)
         case 36, 76, 49: runToastAction(focus) // Return, Enter, Space
         case 53: dismissToast()
-        default: return false
+        default:
+            // 1, 2, 3…: the button of that number.
+            guard let digit = event.charactersIgnoringModifiers.flatMap(Int.init), digit >= 1, digit <= count else { return false }
+            runToastAction(digit - 1)
         }
         return true
     }
@@ -1512,7 +1539,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             actions: Share.actions(url, title: shell.selected?.title, in: self))
     }
 
-    /// ⇧⌘S: a picture of as much of the page as is scrolled through (ScrollShot.swift).
+    /// Edit › Scrolling Screenshot…: a picture of as much of the page as is scrolled through (ScrollShot.swift).
     @objc func startScrollingScreenshot(_ sender: Any?) {
         guard scrollShot == nil, let web = shownWeb else { return }
         let session = ScrollShot(window: self, web: web)
@@ -1530,7 +1557,42 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         layout(animated: true)
     }
 
-    /// ⇧⌘R: the whole page, top to bottom, as a picture on the clipboard (PageShot.swift).
+    /// Edit › Copy Page Screenshot: the whole page, top to bottom, as a picture on the clipboard (PageShot.swift).
+    /// ⇧⌘S: which kind, asked on the pill, with the keyboard on it (1, 2, 3, the arrows and Return, Esc to cancel).
+    @objc func screenshot(_ sender: Any?) {
+        guard scrollShot == nil, !shooting, shownWeb != nil else { return }
+        say("Screenshot", actions: [
+            Toast.Action(title: "Visible", symbol: "rectangle.dashed", help: "Copy what is in view (1)", label: "Copy the visible part") { [weak self] in
+                self?.copyVisibleScreenshot(nil)
+            },
+            Toast.Action(title: "Whole Page", symbol: "doc", help: "Copy the whole page, top to bottom (2)", label: "Copy the whole page") { [weak self] in
+                self?.copyPageScreenshot(nil)
+            },
+            Toast.Action(title: "Select…", symbol: "arrow.up.and.down", help: "Drag over a part and scroll as far as you like (3)", label: "Choose a part, scrolling") { [weak self] in
+                self?.startScrollingScreenshot(nil)
+            },
+        ])
+        _ = focusToast(back: false)
+    }
+
+    /// What is in view, onto the clipboard.
+    @objc func copyVisibleScreenshot(_ sender: Any?) {
+        guard !shooting, let web = shownWeb else { return }
+        shooting = true
+        web.takeSnapshot(with: nil) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.shooting = false
+                guard let image else { return self.say("The page couldn't be captured") }
+                let board = NSPasteboard.general
+                board.clearContents()
+                board.writeObjects([image])
+                let pixels = image.representations.first.map { "\($0.pixelsWide.formatted()) × \($0.pixelsHigh.formatted())" } ?? ""
+                self.say(pixels.isEmpty ? "Screenshot copied" : "Screenshot copied (\(pixels))")
+            }
+        }
+    }
+
     @objc func copyPageScreenshot(_ sender: Any?) {
         guard !shooting, let web = shownWeb else { return }
         shooting = true
@@ -1593,6 +1655,12 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         // Nothing shown yet (its first address never came): that address again.
         else if web.url == nil, let url = tab.url { tab.load(url) }
         else { web.reload() }
+    }
+
+    /// ⇧⌘R: again, nothing taken from the cache.
+    @objc func hardReload(_ sender: Any?) {
+        guard let tab = shell.selected, let web = tab.webView else { return }
+        if web.url == nil, let url = tab.url { tab.load(url) } else { web.reloadFromOrigin() }
     }
 
     @objc func goBack(_ sender: Any?) { shell.selected?.webView?.goBack() }

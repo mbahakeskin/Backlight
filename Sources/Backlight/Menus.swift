@@ -83,8 +83,10 @@ enum Menus {
         let asIs = item("Copy Address as It Is", #selector(BrowserWindow.copyAddressAsIs(_:)), "c", [.command, .shift, .option])
         asIs.isAlternate = true
         menu.addItem(asIs)
-        menu.addItem(item("Copy Page Screenshot", #selector(BrowserWindow.copyPageScreenshot(_:)), "r", [.command, .shift]))
-        menu.addItem(item("Scrolling Screenshot…", #selector(BrowserWindow.startScrollingScreenshot(_:)), "s", [.command, .shift]))
+        menu.addItem(item("Screenshot…", #selector(BrowserWindow.screenshot(_:)), "s", [.command, .shift]))
+        menu.addItem(item("Copy Visible Screenshot", #selector(BrowserWindow.copyVisibleScreenshot(_:))))
+        menu.addItem(item("Copy Page Screenshot", #selector(BrowserWindow.copyPageScreenshot(_:))))
+        menu.addItem(item("Scrolling Screenshot…", #selector(BrowserWindow.startScrollingScreenshot(_:))))
         menu.addItem(.separator())
         let find = item("Find", nil)
         let sub = NSMenu(title: "Find")
@@ -104,6 +106,7 @@ enum Menus {
     private static func view() -> NSMenu {
         let menu = NSMenu(title: "View")
         menu.addItem(item("Reload Page", #selector(BrowserWindow.reload(_:)), "r"))
+        menu.addItem(item("Reload Without Cache", #selector(BrowserWindow.hardReload(_:)), "r", [.command, .shift]))
         menu.addItem(item("Stop", #selector(BrowserWindow.stopLoading(_:)), "."))
         menu.addItem(.separator())
         menu.addItem(item("Actual Size", #selector(BrowserWindow.actualSize(_:)), "0"))

@@ -85,6 +85,9 @@ final class SpaceAnchor: NSObject, NSWindowDelegate {
         }
     }
 
+    /// To the front of its desktop (under the browser's window, which is ordered after it).
+    func orderFront() { if isInFullScreen { window.orderFront(nil) } }
+
     /// Whether the desktop it made is there.
     var isInFullScreen: Bool { window.styleMask.contains(.fullScreen) }
 }

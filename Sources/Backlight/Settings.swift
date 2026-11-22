@@ -164,7 +164,8 @@ private struct TabSettings: View {
     @AppStorage("archive.hours") private var archive = 12.0
     @AppStorage("sleep.freeze") private var freeze = true
     @AppStorage("sleep.freezeAfter") private var freezeAfter = 0.0
-    @AppStorage(SiteDevelop.youTubeKey) private var youTubeChrome = true
+    @AppStorage(SiteDevelop.youTubeKey) private var youTubeChrome = false
+    @AppStorage(SiteDevelop.youTubeTruthKey) private var youTubeScriptSafari = false
 
     private let freezeChoices: [(String, Double)] = [("Right away", 0), ("30 seconds", 30), ("1 minute", 60), ("5 minutes", 300), ("15 minutes", 900), ("1 hour", 3600)]
     private let unloadChoices: [(String, Double)] = [("1 hour", 1), ("2 hours", 2), ("6 hours", 6), ("12 hours", 12), ("1 day", 24), ("Never", 0)]
@@ -206,8 +207,13 @@ private struct TabSettings: View {
             Section {
                 Toggle(isOn: $youTubeChrome) {
                     Text("Tell YouTube this is Chrome")
-                    Text("YouTube offers Download (Premium) only to Chrome. Settings kept for youtube.com below win.")
+                    Text("YouTube offers Download (Premium) only to Chrome. On some accounts YouTube then stops videos after about 45 seconds (“Something went wrong”): the tab goes back to Safari's name by itself and the video goes on. Settings kept for youtube.com below win.")
                 }
+                Toggle(isOn: $youTubeScriptSafari) {
+                    Text("Experimental: Chrome to YouTube's servers only")
+                    Text("The page's own script is told the truth (Safari), which may keep videos from stopping while Download is still offered. Reload YouTube tabs after changing it.")
+                }
+                .disabled(!youTubeChrome)
             }
             Section("Sites with developer settings") {
                 SiteList(sites: SiteDevelop.shared.sites.keys.sorted(), empty: "None. Develop › Keep These Settings for This Site.", detail: {

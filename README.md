@@ -68,8 +68,8 @@ without your say (Settings › General turns the check off).
   their own sign-ins, split view, private tabs that live in memory only. Tabs
   off screen are frozen and, after a while, unloaded.
 - **Reading and saving.** Reader (⌥⌘R), dark pages, Peek (Shift-click a link),
-  Translate Page on this Mac, picture in picture, the page as one image or a
-  scrolling screenshot of the part you choose (⇧⌘S),
+  Translate Page on this Mac, picture in picture, screenshots (⇧⌘S: what is in view,
+  the whole page, or a part you scroll through), a reload without the cache (⇧⌘R),
   downloads you can pause, a button for photos and videos on the sites you list.
 - **Privacy.** Nothing leaves but the pages you open. Ads and trackers are
   blocked by uBlock Origin Lite; tracking parameters are cut from links.

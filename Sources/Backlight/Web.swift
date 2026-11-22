@@ -44,6 +44,7 @@ enum Web {
         Debug.attach(to: config)
         config.userContentController.add(DuskRelay.shared, contentWorld: Dusk.world, name: DuskRelay.name)
         config.userContentController.add(MediaDownload.shared, contentWorld: MediaDownload.world, name: MediaDownload.name)
+        YouTubeGuard.attach(to: config)
         #if AGENT
         AgentPage.attach(to: config)
         #endif

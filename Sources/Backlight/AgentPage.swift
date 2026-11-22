@@ -766,15 +766,18 @@ enum AgentPage {
       // have gone): what a click set going has come to rest. Answers how long.
       // No looking again and again: each change sets one timer again, and when it runs out
       // nothing has changed for `idle` (the page is quiet); `cap` is only the watchdog.
+      const real = (r) => r.type !== "attributes" || r.target.getAttribute(r.attributeName) !== r.oldValue;
       const quiet = (idle, cap) => new Promise((resolve) => {
         const start = performance.now();
         let timer = 0;
         const finish = () => { watcher.disconnect(); clearTimeout(timer); clearTimeout(deadline); resolve(Math.round(performance.now() - start)); };
         const arm = () => { clearTimeout(timer); timer = setTimeout(finish, idle); };
-        const watcher = new MutationObserver(arm);
+        // A write that leaves an attribute as it was is no change (some pages set the same class on many
+        // elements every frame: Google Flights after a click, 7,000 in a moment).
+        const watcher = new MutationObserver((records) => { if (records.some(real)) arm(); });
         // Pictures loading late, animations and the like only touch a few
         // attributes (src, style…): those say nothing of the page having changed.
-        watcher.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true,
+        watcher.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeOldValue: true,
           attributeFilter: ["class", "hidden", "open", "disabled", "value", "checked", "aria-expanded", "aria-hidden", "aria-selected", "aria-checked", "aria-pressed", "aria-busy"] });
         const deadline = setTimeout(finish, cap);
         arm();
@@ -808,8 +811,8 @@ enum AgentPage {
         const off = [];
         let timer = 0, done = false;
         const finish = (why) => { if (done) return; done = true; off.forEach((f) => f()); clearTimeout(timer); resolve(why); };
-        const watcher = new MutationObserver(() => finish("changed"));
-        watcher.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
+        const watcher = new MutationObserver((records) => { if (records.some(real)) finish("changed"); });
+        watcher.observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeOldValue: true });
         off.push(() => watcher.disconnect());
         try { const seen = new PerformanceObserver(() => finish("resource")); seen.observe({ type: "resource" }); off.push(() => seen.disconnect()); } catch (e) {}
         for (const t of ["load", "popstate", "hashchange"]) { const h = () => finish(t); addEventListener(t, h, { once: true }); off.push(() => removeEventListener(t, h)); }
@@ -1205,7 +1208,9 @@ enum AgentPage {
     return true;
   };
 
-  const MUT = { subtree: true, childList: true, characterData: true, attributes: true,
+  // A write that leaves an attribute as it was is no change (see `quiet` in the agent's script).
+  const real = (r) => r.type !== 'attributes' || r.target.getAttribute(r.attributeName) !== r.oldValue;
+  const MUT = { subtree: true, childList: true, characterData: true, attributes: true, attributeOldValue: true,
     attributeFilter: ['class', 'hidden', 'open', 'disabled', 'value', 'checked', 'aria-expanded', 'aria-hidden', 'aria-selected', 'aria-checked', 'aria-pressed', 'aria-busy'] };
   // Resolves when nothing the action started is pending for two frames and the page has not changed for
   // `margin` ms (a margin for what cannot be seen: messages between tasks); `cap` is the watchdog. A page
@@ -1214,7 +1219,7 @@ enum AgentPage {
     netBudget = nb;
     const t0 = performance.now();
     let timer = 0, done = false, checking = false, lastChange = 0, busy = false, busyEnd = 0;
-    const mo = new MutationObserver(() => { lastChange = performance.now(); if (S.noisy) arm(win); else if (quiet) arm(margin); });
+    const mo = new MutationObserver((records) => { if (!records.some(real)) return; lastChange = performance.now(); if (S.noisy) arm(win); else if (quiet) arm(margin); });
     let quiet = false;
     const arm = (ms) => { ct0(timer); timer = st0(() => finish(S.noisy ? 'window' : 'quiet'), ms); };
     const finish = (why) => {

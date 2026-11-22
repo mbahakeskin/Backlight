@@ -1,8 +1,10 @@
 import Foundation
 import Observation
 
-/// Pages kept on purpose: one flat list, in the order you keep it, in
-/// bookmarks.json. ⌘D keeps the page you are on, or lets it go again.
+/// Pages kept on purpose, in the order you keep them, in bookmarks.json; and
+/// folders to keep them in, in bookmark-folders.json beside it (a file of its
+/// own, so an older Backlight still reads the bookmarks, all at the top). ⌘D
+/// keeps the page you are on, or lets it go again.
 @Observable
 final class Bookmarks {
     /// The bookmarks of the profile in front.
@@ -13,19 +15,40 @@ final class Bookmarks {
         var url: URL
         var title: String
         var added = Date()
+        /// The folder it is in; none: at the top.
+        var folder: UUID? = nil
+    }
+
+    /// A folder, in another one or at the top.
+    struct Folder: Codable, Identifiable, Hashable {
+        var id = UUID()
+        var name: String
+        var parent: UUID? = nil
     }
 
     private(set) var marks: [Mark]
+    private(set) var folders: [Folder]
     @ObservationIgnored private let file: String
+    @ObservationIgnored private let foldersFile: String
 
     init(file: String) {
         self.file = file
-        marks = Store.read(file, as: [Mark].self) ?? []
+        foldersFile = file.replacingOccurrences(of: "bookmarks", with: "bookmark-folders")
+        let folders = Store.read(foldersFile, as: [Folder].self) ?? []
+        self.folders = folders
+        // A bookmark whose folder is gone (deleted by an older Backlight) is at the top.
+        let known = Set(folders.map(\.id))
+        marks = (Store.read(file, as: [Mark].self) ?? []).map { mark in
+            var mark = mark
+            if let folder = mark.folder, !known.contains(folder) { mark.folder = nil }
+            return mark
+        }
     }
 
     private func save() { Store.write(marks, to: file) }
+    private func saveFolders() { Store.write(folders, to: foldersFile) }
     func appendImported(_ mark: Mark) { marks.append(mark) }
-    func saveImported() { save() }
+    func saveImported() { save(); saveFolders() }
 
     func contains(_ url: URL?) -> Bool {
         guard let url else { return false }
@@ -57,6 +80,90 @@ final class Bookmarks {
 
     func search(_ query: String) -> [Mark] {
         Fuzzy.ranked(marks, query, title: \.title, url: \.url)
+    }
+
+    // MARK: - folders
+
+    /// What is right in a folder (none: the top), folders first, each in the order kept.
+    func inside(_ folder: UUID?) -> (folders: [Folder], marks: [Mark]) {
+        (folders.filter { $0.parent == folder }, marks.filter { $0.folder == folder })
+    }
+
+    /// How many bookmarks are in a folder, its folders' too.
+    func count(in folder: UUID) -> Int {
+        marks.filter { $0.folder == folder }.count + folders.filter { $0.parent == folder }.reduce(0) { $0 + count(in: $1.id) }
+    }
+
+    /// The names from the top down to the folder.
+    func path(of folder: UUID?) -> [String] {
+        var names: [String] = []
+        var current = folder
+        var seen = Set<UUID>()
+        while let id = current, seen.insert(id).inserted, let found = folders.first(where: { $0.id == id }) {
+            names.insert(found.name, at: 0)
+            current = found.parent
+        }
+        return names
+    }
+
+    @discardableResult
+    func makeFolder(_ name: String, in parent: UUID? = nil) -> Folder {
+        let folder = Folder(name: name, parent: parent)
+        folders.append(folder)
+        saveFolders()
+        return folder
+    }
+
+    func rename(_ folder: UUID, to name: String) {
+        guard let index = folders.firstIndex(where: { $0.id == folder }), !name.isEmpty else { return }
+        folders[index].name = name
+        saveFolders()
+    }
+
+    /// The folder goes; what was in it goes up to where the folder was, nothing is lost.
+    func deleteFolder(_ folder: UUID) {
+        guard let gone = folders.first(where: { $0.id == folder }) else { return }
+        for index in marks.indices where marks[index].folder == folder { marks[index].folder = gone.parent }
+        for index in folders.indices where folders[index].parent == folder { folders[index].parent = gone.parent }
+        folders.removeAll { $0.id == folder }
+        save()
+        saveFolders()
+    }
+
+    /// A bookmark into a folder (none: the top), at the end of it.
+    func move(_ mark: UUID, to folder: UUID?) {
+        guard let index = marks.firstIndex(where: { $0.id == mark }), marks[index].folder != folder else { return }
+        var moved = marks.remove(at: index)
+        moved.folder = folder
+        marks.append(moved)
+        save()
+    }
+
+    /// A folder into another one (none: the top); never into itself or one of its own.
+    func moveFolder(_ folder: UUID, to parent: UUID?) {
+        guard folder != parent, let index = folders.firstIndex(where: { $0.id == folder }), folders[index].parent != parent else { return }
+        var above = parent
+        while let id = above {
+            if id == folder { return }
+            above = folders.first { $0.id == id }?.parent
+        }
+        folders[index].parent = parent
+        saveFolders()
+    }
+
+    /// The folder at these names from the top, made where missing (for what is brought in from another browser).
+    func folder(at names: [String]) -> UUID? {
+        var parent: UUID?
+        for name in names where !name.isEmpty {
+            if let found = folders.first(where: { $0.parent == parent && $0.name == name }) {
+                parent = found.id
+            } else {
+                let made = Folder(name: name, parent: parent)
+                folders.append(made)
+                parent = made.id
+            }
+        }
+        return parent
     }
 }
 

@@ -96,7 +96,7 @@ nonisolated enum AgentLink {
 
     /// Sends one line to the agent.
     static func emit(_ message: [String: Any]) {
-        guard var data = try? JSONSerialization.data(withJSONObject: message, options: [.withoutEscapingSlashes]) else { return }
+        guard var data = try? JSONSerialization.data(withJSONObject: message, options: [.withoutEscapingSlashes, .sortedKeys]) else { return }
         data.append(0x0A)
         printing.lock()
         FileHandle.standardOutput.write(data)

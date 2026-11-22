@@ -23,7 +23,9 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   the menu bar and the Dock are macOS's own, hidden until the pointer
   presses against the top or the Dock's edge; a click anywhere else in the
   strip beside the notch is the page's. The menu bar moves the top bar down
-  below it while it is there.
+  below it while it is there. With the notch row in use, full screen still
+  gets a desktop of its own (Mission Control, Stage Manager and the swipes
+  between desktops see it as one).
 - A new tab starts as a field over the current page; the tab exists only
   once you enter an address or a search. Asked for with the New Tab row
   above the sidebar's tabs it goes first in the list, with the one below
@@ -78,8 +80,12 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   hours off screen, or when memory runs short, a tab is unloaded and comes
   back where it was. Tabs holding unsent typing, sound or a call are left
   alone, and a site can be kept awake (the sun in the top bar).
+- In a window, the sidebar also comes out when the pointer leaves through the
+  window's left edge, and stays while the pointer is just past it.
 - History, bookmarks, downloads and archived tabs, each a searchable panel
-  over the page; the new-tab field suggests open tabs, bookmarks and history.
+  over the page (as are Settings, Keyboard Shortcuts and About; a click beside
+  one closes it). Bookmarks go in folders (drag one onto a folder, or use its
+  menu); import keeps the folders, and the Bookmarks menu shows them; the new-tab field suggests open tabs, bookmarks and history.
   A word needn't be typed whole: its letters in order ("gthub"), or the
   initials of two words ("gh bs"), find it too, after what matches whole.
 - The web cache is kept under a limit (Settings › Privacy, 250 MB unless

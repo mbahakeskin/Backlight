@@ -10,8 +10,7 @@ import SwiftUI
 // browser's files are copied to a temporary folder first (they are locked
 // while it runs) and never written to.
 //
-// Bookmark folders are flattened into the title ("Work / Reports"), as
-// bookmarks.json is one list. All of the history is taken (History keeps up to 100,000 pages).
+// Bookmark folders come over as folders (the bar and the menu are roots, not folders). All of the history is taken (History keeps up to 100,000 pages).
 // Cookies are not moved. Passwords go into a plain CSV file the person
 // chooses a place for, in the shape Chrome writes (name,url,username,
 // password,note), which password managers read; there is no vault here.
@@ -88,7 +87,7 @@ struct ImportSource: Identifiable, Hashable {
 }
 
 struct Imported {
-    var bookmarks: [(title: String, url: URL)] = []
+    var bookmarks: [Importer.Found] = []
     var visits: [(url: URL, title: String, date: Date)] = []
 }
 
@@ -101,6 +100,9 @@ enum Importer {
     }
 
     // MARK: - reading
+
+    /// A bookmark of another browser's, with the folders it is in from the top down.
+    typealias Found = (folders: [String], title: String, url: URL)
 
     nonisolated static func read(_ source: ImportSource, bookmarks: Bool, history: Bool) throws -> Imported {
         var result = Imported()
@@ -126,12 +128,12 @@ enum Importer {
     
     // Chrome and the browsers built on it.
 
-    private nonisolated static func chromiumBookmarks(_ folder: URL) throws -> [(title: String, url: URL)] {
+    private nonisolated static func chromiumBookmarks(_ folder: URL) throws -> [Found] {
         guard let data = try? Data(contentsOf: folder.appendingPathComponent("Bookmarks")),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let roots = root["roots"] as? [String: Any]
         else { return [] }
-        var found: [(title: String, url: URL)] = []
+        var found: [Found] = []
         // Each root (bookmark bar, other, mobile) is a folder whose name isn't kept.
         for key in ["bookmark_bar", "other", "synced"] {
             guard let node = roots[key] as? [String: Any] else { continue }
@@ -140,11 +142,11 @@ enum Importer {
         return found
     }
 
-    private nonisolated static func visit(_ node: [String: Any], _ path: [String], _ found: inout [(title: String, url: URL)]) {
+    private nonisolated static func visit(_ node: [String: Any], _ path: [String], _ found: inout [Found]) {
         if node["type"] as? String == "url" {
             guard let url = web(node["url"] as? String) else { return }
             let name = (node["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (url.host() ?? url.absoluteString)
-            found.append((title: (path + [name]).joined(separator: " / "), url: url))
+            found.append((folders: path, title: name, url: url))
         } else if node["type"] as? String == "folder" {
             let name = node["name"] as? String ?? ""
             for child in node["children"] as? [[String: Any]] ?? [] { visit(child, name.isEmpty ? path : path + [name], &found) }
@@ -163,17 +165,17 @@ enum Importer {
 
     // Safari. Its folder is closed to apps without Full Disk Access.
 
-    private nonisolated static func safariBookmarks(_ folder: URL) throws -> [(title: String, url: URL)] {
+    private nonisolated static func safariBookmarks(_ folder: URL) throws -> [Found] {
         let file = folder.appendingPathComponent("Bookmarks.plist")
         guard let data = try? Data(contentsOf: file) else { throw Failure(message: SQLite.safariClosed, diskAccess: true) }
         guard let root = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else { return [] }
-        var found: [(title: String, url: URL)] = []
+        var found: [Found] = []
         func walk(_ node: [String: Any], _ path: [String]) {
             let type = node["WebBookmarkType"] as? String
             if type == "WebBookmarkTypeLeaf" {
                 guard let url = web(node["URLString"] as? String) else { return }
                 let title = ((node["URIDictionary"] as? [String: Any])?["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? (url.host() ?? url.absoluteString)
-                found.append((title: (path + [title]).joined(separator: " / "), url: url))
+                found.append((folders: path, title: title, url: url))
             } else if type == "WebBookmarkTypeList" {
                 let title = node["Title"] as? String ?? ""
                 // Reading List is not bookmarks; the bar and the menu are roots, not folders.
@@ -202,7 +204,7 @@ enum Importer {
 
     // Firefox.
 
-    private nonisolated static func firefoxBookmarks(_ folder: URL) throws -> [(title: String, url: URL)] {
+    private nonisolated static func firefoxBookmarks(_ folder: URL) throws -> [Found] {
         let file = folder.appendingPathComponent("places.sqlite")
         let folders = try SQLite.rows(of: file, "SELECT id, parent, title FROM moz_bookmarks WHERE type = 2")
         var names: [Int64: (parent: Int64, title: String)] = [:]
@@ -223,7 +225,7 @@ enum Importer {
         return rows.compactMap { row in
             guard let parent = row[0] as? Int64, let url = web(row[2] as? String) else { return nil }
             let name = [row[1] as? String, row[3] as? String].compactMap { $0 }.first { !$0.isEmpty } ?? (url.host() ?? url.absoluteString)
-            return (title: (path(of: parent) + [name]).joined(separator: " / "), url: url)
+            return (folders: path(of: parent), title: name, url: url)
         }
     }
 
@@ -348,13 +350,13 @@ enum SQLite {
 // MARK: - what is added
 
 extension Bookmarks {
-    /// Bookmarks from another browser; addresses already kept are skipped.
+    /// Bookmarks from another browser, in folders as they were there; addresses already kept are skipped.
     @discardableResult
-    func add(_ found: [(title: String, url: URL)]) -> Int {
+    func add(_ found: [Importer.Found]) -> Int {
         var known = Set(marks.map(\.url))
         var added = 0
         for item in found where known.insert(item.url).inserted {
-            appendImported(Mark(url: item.url, title: item.title))
+            appendImported(Mark(url: item.url, title: item.title, folder: folder(at: item.folders)))
             added += 1
         }
         saveImported()

@@ -116,6 +116,37 @@ enum Dialogs {
 }
 
 extension Tab: WKUIDelegate {
+    /// Where the window is, for a page asking `outerWidth`, `outerHeight`, `screenX` and `screenY`. Unanswered,
+    /// WebKit says a window of no size at the bottom of the screen: what a browser with no window (a headless
+    /// one, as bot checks see it) says, and Google Docs on an older Safari took 0 / innerWidth for a quarter zoom.
+    /// Safari answers with its window. This answers with the window as tall as it is but only as wide as the page,
+    /// at the page's own place across: the sidebar beside a page is none of Safari's chrome, and counted,
+    /// `outerWidth - innerWidth` passes 160, which Discord takes for docked DevTools and signs you out.
+    @objc(_webView:getWindowFrameWithCompletionHandler:)
+    func webView(_ webView: WKWebView, getWindowFrameWithCompletionHandler done: @escaping (CGRect) -> Void) {
+        done(windowFrame(for: webView))
+    }
+
+    /// The identifier of the agent's backstage panel (AgentBackstage.swift), where a page is out of every screen.
+    static let backstageIdentifier = "backlight.agent.backstage"
+
+    /// The frame a page reads as its window's (in the screen's coordinates, as AppKit has them).
+    func windowFrame(for webView: WKWebView) -> CGRect {
+        // A page out of sight (a tab behind, one the agent reads) is in no window: it reads the window its tab
+        // belongs to, as wide as it is laid out itself.
+        // One hung backstage for the agent (AgentBackstage.swift) is out of every screen: it reads its tab's window.
+        let own = webView.window?.identifier?.rawValue == Tab.backstageIdentifier ? nil : webView.window
+        let window = own ?? (host as? BrowserWindow)?.window ?? Windows.front?.window ?? NSApp.mainWindow
+        let width = webView.bounds.width
+        guard let frame = window?.frame else {
+            let screen = NSScreen.main?.visibleFrame ?? .zero
+            return CGRect(x: screen.minX, y: screen.minY, width: width, height: webView.bounds.height)
+        }
+        guard width > 0 else { return frame }
+        let across = own != nil ? webView.convert(webView.bounds, to: nil).minX : 0
+        return CGRect(x: frame.minX + across, y: frame.minY, width: width, height: max(frame.height, webView.bounds.height))
+    }
+
     /// A question from the page, shown. In a build with the agent tools the
     /// one that is up is kept with its tab meanwhile, so the agent, in a tab it
     /// works in, can see it and answer it too.

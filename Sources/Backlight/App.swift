@@ -104,20 +104,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func newTab(_ sender: Any?) { Windows.open() }
     @objc func newPrivateTab(_ sender: Any?) { Windows.open(privately: true) }
 
-    /// The standard panel, with who made it and where it lives.
+    /// A panel over the front window, as Settings is: who made it and where it lives.
     @objc func showAbout(_ sender: Any?) {
-        let credits = NSMutableAttributedString(string: "Made by Mehmet Baha Keskin\n", attributes: [
-            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .foregroundColor: NSColor.labelColor,
-        ])
-        credits.append(NSAttributedString(string: "github.com/mbahakeskin/Backlight", attributes: [
-            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
-            .link: URL(string: "https://github.com/mbahakeskin/Backlight")!,
-        ]))
-        let centered = NSMutableParagraphStyle()
-        centered.alignment = .center
-        credits.addAttribute(.paragraphStyle, value: centered, range: NSRange(location: 0, length: credits.length))
-        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
-        NSApp.activate()
+        let window = Windows.front ?? Windows.open(empty: true)
+        if window.shell.panel != .about { window.showPanel(.about) }
     }
 
     @objc func showSettings(_ sender: Any?) { SettingsWindow.show() }

@@ -191,9 +191,9 @@ enum Menus {
             if menu.title == "Bookmarks" {
                 menu.addItem(Menus.item("Bookmark This Page", #selector(BrowserWindow.bookmarkPage(_:)), "d"))
                 menu.addItem(Menus.item("Show Bookmarks", #selector(BrowserWindow.showBookmarks(_:)), "b", [.command, .option]))
-                let marks = Bookmarks.shared.marks
-                if !marks.isEmpty { menu.addItem(.separator()) }
-                for mark in marks.prefix(40) { menu.addItem(page(mark.title, mark.url)) }
+                let bookmarks = Bookmarks.shared
+                if !bookmarks.marks.isEmpty || !bookmarks.folders.isEmpty { menu.addItem(.separator()) }
+                fill(menu, with: nil, from: bookmarks)
             } else {
                 let closed = Closed.tabs.reversed()
                 if closed.isEmpty {
@@ -203,6 +203,25 @@ enum Menus {
                 }
                 for entry in closed.prefix(20) { menu.addItem(page(entry.title, entry.url)) }
             }
+        }
+
+        /// A folder's bookmarks into a menu, its folders as menus of their own (40 of each at most).
+        private func fill(_ menu: NSMenu, with folder: UUID?, from bookmarks: Bookmarks) {
+            let inside = bookmarks.inside(folder)
+            for child in inside.folders.prefix(40) {
+                let item = NSMenuItem(title: child.name, action: nil, keyEquivalent: "")
+                item.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+                let sub = NSMenu(title: child.name)
+                fill(sub, with: child.id, from: bookmarks)
+                if sub.items.isEmpty {
+                    let none = NSMenuItem(title: "Empty", action: nil, keyEquivalent: "")
+                    none.isEnabled = false
+                    sub.addItem(none)
+                }
+                item.submenu = sub
+                menu.addItem(item)
+            }
+            for mark in inside.marks.prefix(40) { menu.addItem(page(mark.title, mark.url)) }
         }
 
         private func page(_ title: String, _ url: URL) -> NSMenuItem {

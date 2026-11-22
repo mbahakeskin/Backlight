@@ -158,6 +158,15 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         super.init(window: window)
         window.delegate = self
         window.onFullScreen = { [weak self] in self?.fullScreenRequested() ?? false }
+        NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.menuOpen = true }
+        }
+        NotificationCenter.default.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.menuOpen = false
+                if self?.menuBarWatch != nil { self?.menuBarMoved() }
+            }
+        }
         build(in: window)
         place(window)
         lights = Lights(window)
@@ -514,11 +523,44 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         let over = { (frame: NSRect) in
             location.x >= frame.minX && location.x <= frame.maxX && location.y >= frame.minY && location.y <= frame.maxY
         }
-        guard over(window.frame),
-              NSApp.orderedWindows.first(where: { $0.windowController is BrowserWindow && $0.isVisible && over($0.frame) }) === window
-        else { return }
+        guard over(window.frame) else {
+            pastLeftEdge(location)
+            lastInside = nil
+            return
+        }
+        guard NSApp.orderedWindows.first(where: { $0.windowController is BrowserWindow && $0.isVisible && over($0.frame) }) === window
+        else { lastInside = nil; return }
+        lastInside = location
         followPointerWithEdges()
         pointer(at: root.convert(window.convertPoint(fromScreen: location), from: nil))
+    }
+
+    /// Where the pointer last was over this window, while it was the front one there.
+    private var lastInside: NSPoint?
+    /// How far left of the window the pointer may go with the sidebar staying out.
+    private static let pastLeft: CGFloat = 160
+
+    /// In a window (not full screen) the left edge is a line in the middle of the screen, easily gone past: the
+    /// pointer leaving through it brings the sidebar out, as reaching it does, and the sidebar stays out while the
+    /// pointer is a little way past it (Arc and Zen do the same).
+    private func pastLeftEdge(_ location: NSPoint) {
+        guard !shell.sidebarPinned, scrollShot == nil, let window else { return }
+        guard isPastLeft(location) else {
+            if shell.sidebarShown { linger(.side) }
+            return
+        }
+        if let last = lastInside, last.x - window.frame.minX <= 60, NSApp.isActive, window.isKeyWindow {
+            disarm(.side)
+            set(.side, shown: true)
+        }
+        if shell.sidebarShown { stay(.side) }
+    }
+
+    private func isPastLeft(_ location: NSPoint) -> Bool {
+        guard let window, !shell.fullScreen, !edgeToEdge else { return false }
+        let frame = window.frame
+        return location.x < frame.minX && location.x >= frame.minX - BrowserWindow.pastLeft
+            && location.y >= frame.minY && location.y <= frame.maxY
     }
 
     private func pointer(at point: NSPoint) {
@@ -544,6 +586,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     /// makes way, below it.
     private var menuBarDown = false
     private var menuBarWatch: Timer?
+    /// A menu of the menu bar is open (NSMenu tracking): the bar stays while the pointer is down in the menu.
+    private var menuOpen = false
     /// The menu bar has been down since the top bar came out: once it has
     /// gone back up, the top bar, back beside the notch, stays a little
     /// longer after the pointer leaves it, to be reached again.
@@ -571,7 +615,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         edgesAuto = false
         coverTimer?.invalidate()
         coverTimer = nil
-        if window?.level != .normal { window?.level = .normal }
         dockHeld = false
         edgeSince = nil
         heldUntil = .distantPast
@@ -580,6 +623,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         dockEdge = UserDefaults(suiteName: "com.apple.dock")?.string(forKey: "orientation") ?? "bottom"
         menuBarDown = false
         menuBarWasDown = false
+        rowCover.hide()
+        rowShot = nil
+        settleLevel()
     }
 
     /// Checked while the pointer is at the top or the menu bar down: macOS
@@ -594,7 +640,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
         // Quartz measures down from the top of the first screen.
         let screenTop = (NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY) - screen.frame.maxY
-        let down = windows.contains { info in
+        // On the anchor's desktop the menu bar's window stays at the top, shown or not (measured: y 0, alpha 1 both
+        // ways), so it says nothing: there the bar counts as down while the pointer is in its row, or a menu of it is open.
+        let row = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : (NSApp.mainMenu?.menuBarHeight ?? 24)
+        let down = anchor != nil ? (menuOpen || (edgesAuto && NSEvent.mouseLocation.y >= screen.frame.maxY - row - 6)) : windows.contains { info in
             guard info[kCGWindowOwnerName as String] as? String == "Window Server",
                   info[kCGWindowLayer as String] as? Int == level,
                   let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
@@ -679,7 +728,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         let point = root.convert(window.mouseLocationOutsideOfEventStream, from: nil)
         let inside = root.bounds.contains(point)
         switch edge {
-        case .side: return inside && point.x <= sidebar.frame.maxX + Metrics.slack
+        case .side: return (inside && point.x <= sidebar.frame.maxX + Metrics.slack) || isPastLeft(NSEvent.mouseLocation)
         case .top: return shell.editingAddress || (inside && point.y >= topBar.frame.minY - Metrics.slack)
         }
     }
@@ -772,27 +821,37 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     // MARK: - the agent (Agent.swift)
 
     /// A tab the agent works in while another is shown: its page woken, made if
-    /// it had been let go, and in the window behind the one shown, where it
-    /// goes on running and can be pictured and clicked.
+    /// it had been let go, and hung backstage (AgentBackstage.swift), out of
+    /// every screen, where it goes on running, can be pictured, clicked and
+    /// hovered, and counts as focused, the person's window untouched.
     func keepRunning(_ tab: Tab) {
         guard shell.allTabs.contains(tab) else { return }
         Freeze.thaw(tab)
         let web = tab.makeWebView()
         PiP.keepAwake(web, true)
         guard tab !== shell.selected else { return }
-        web.isHidden = false
-        if web.superview !== page {
-            web.frame = page.bounds
-            web.autoresizingMask = [.width, .height]
-        }
-        page.addSubview(web, positioned: .below, relativeTo: nil)
+        // A page kept in the window for its sound or its call (Sleep.keepsAwake) is moved backstage too while
+        // the agent works in it: it plays on there; letRest puts it back.
+        AgentBackstage.hang(web, sized: page.bounds.size)
     }
 
     /// The agent has let the tab go: its page leaves the window as any other's does.
     func letRest(_ tab: Tab) {
         guard let web = tab.webView else { return }
         if !PiP.holds(tab) { PiP.keepAwake(web, false) }
-        guard tab !== shell.selected, web.superview === page, !PiP.holds(tab) else { return }
+        // Hung backstage: back where any page not shown is.
+        if tab !== shell.selected, AgentBackstage.holds(web) {
+            AgentBackstage.release(web)
+            if Sleep.keepsAwake(tab.url) || PiP.holds(tab) {
+                web.frame = page.bounds
+                web.autoresizingMask = [.width, .height]
+                page.addSubview(web, positioned: .below, relativeTo: nil)
+            }
+        }
+        guard tab !== shell.selected, web.superview === page, !PiP.holds(tab) else {
+            if tab !== shell.selected, web.superview == nil, !PiP.holds(tab) { Sleep.freezeIfIdle(tab) }
+            return
+        }
         if Sleep.keepsAwake(tab.url) {
             web.isHidden = true
         } else {
@@ -852,6 +911,15 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             let web = current.webView
             current.leavingScreen { [weak self, weak current] in
                 guard let self, let current, let web, current !== self.shell.selected, current.webView === web else { return }
+                #if AGENT
+                // The agent works in it: backstage, where it goes on, focused (AgentBackstage.swift); and once
+                // it is there, it is the agent's to keep, whatever its tab does.
+                if current.isWorkedIn, !PiP.holds(current) {
+                    AgentBackstage.hang(web, sized: self.page.bounds.size)
+                    return
+                }
+                if AgentBackstage.holds(web) { return }
+                #endif
                 if PiP.holds(current) || current.isWorkedIn {
                     // Its video is in Picture in Picture, or the agent works in
                     // it: behind the one shown, not hidden, so the page goes
@@ -1737,6 +1805,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
 
     /// Which full screen ⌃⌘F, the green light and the menu bring.
     private func fullScreenRequested() -> Bool {
+        // On its way into its own desktop (SpaceAnchor.swift): a second press waits for that.
+        if anchor != nil, !edgeToEdge { return true }
         if edgeToEdge { toggleEdgeToEdge(); return true }
         guard BrowserWindow.coversNotch, let screen = window?.screen, screen.safeAreaInsets.top > 0,
               window?.styleMask.contains(.fullScreen) == false else { return false }
@@ -1749,26 +1819,105 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     /// The frame to remember: the window's own, not the screen's.
     var restingFrame: NSRect? { windowedFrame ?? window?.frame }
 
+    /// The desktop of its own Backlight's full screen is on (SpaceAnchor.swift), and how the window joined
+    /// desktops before it went there.
+    private var anchor: SpaceAnchor?
+    private var behaviorBeforeAnchor: NSWindow.CollectionBehavior?
+    /// On its way onto the anchor's desktop: macOS moves it there a moment after it comes to the front, and once
+    /// it is there (seen on screen, on the desktop shown) `moveToActiveSpace` comes off (windowDidChangeOcclusionState).
+    private var joiningAnchor = false
+    /// Anchors on their way out, kept until macOS says they are out (a window holds its delegate weakly).
+    private var leavingAnchors: [SpaceAnchor] = []
+
+    private func letGo(_ anchor: SpaceAnchor, then: @escaping () -> Void = {}) {
+        leavingAnchors.append(anchor)
+        anchor.leave { [weak self, weak anchor] in
+            self?.leavingAnchors.removeAll { $0 === anchor }
+            then()
+        }
+    }
+
+    /// The menu bar and the Dock, as Backlight's full screen wants them. On the anchor's desktop, which is in
+    /// macOS's own full screen, the options keep its full-screen part (macOS takes hidden and auto-hiding there,
+    /// with it: measured, 1034 and 1029), and none at all is left to macOS as it leaves.
+    private func setOptions(_ options: NSApplication.PresentationOptions) {
+        guard let anchor else { NSApp.presentationOptions = options; return }
+        guard anchor.isInFullScreen, !options.isEmpty else { return }
+        NSApp.presentationOptions = options.union(.fullScreen)
+    }
+
     func toggleEdgeToEdge() {
         guard let window = window as? ShellWindow else { return }
         if window.edgeToEdge {
             window.edgeToEdge = false
             shell.fullScreen = false
             resetMenuBar()
-            NSApp.presentationOptions = []
+            setOptions([])
             window.isMovable = true
-            if let frame = windowedFrame { window.setFrame(frame, display: true, animate: true) }
+            let frame = windowedFrame
             windowedFrame = nil
+            settleToggle()
+            guard let anchor else {
+                if let frame { window.setFrame(frame, display: true, animate: true) }
+                return
+            }
+            // Back to the desktop it came from as the anchor's goes, then its frame there.
+            self.anchor = nil
+            window.collectionBehavior = (behaviorBeforeAnchor ?? [.fullScreenPrimary]).union(.moveToActiveSpace)
+            letGo(anchor) { [weak self, weak window] in
+                guard let self, let window else { return }
+                window.makeKeyAndOrderFront(nil)
+                window.collectionBehavior = self.behaviorBeforeAnchor ?? [.fullScreenPrimary]
+                self.behaviorBeforeAnchor = nil
+                if let frame { window.setFrame(frame, display: true, animate: false) }
+                self.layout(animated: false)
+                Debug.log("edges", "left its own desktop: \(NSStringFromRect(window.frame))")
+            }
         } else {
-            guard let screen = window.screen ?? NSScreen.main else { return }
             windowedFrame = window.frame
-            window.edgeToEdge = true
-            shell.fullScreen = true
-            resetMenuBar()
-            NSApp.presentationOptions = BrowserWindow.hiddenOptions
-            window.isMovable = false
-            window.setFrame(screen.frame, display: true, animate: true)
+            let anchor = SpaceAnchor(over: window.frame)
+            self.anchor = anchor
+            // Out of full screen by some other way (Mission Control): the window comes out with it.
+            anchor.onLeftByItself = { [weak self, weak anchor] in
+                guard let self, let anchor, self.anchor === anchor else { return }
+                if self.edgeToEdge { self.toggleEdgeToEdge() } else { self.anchor = nil }
+            }
+            anchor.enter { [weak self, weak window, weak anchor] in
+                guard let self, let window, let anchor, self.anchor === anchor else { return }
+                guard anchor.isInFullScreen, let screen = window.screen ?? NSScreen.main else {
+                    // macOS wouldn't: Backlight's own full screen on this desktop, as before.
+                    self.anchor = nil
+                    self.letGo(anchor)
+                    self.enterEdges(window, on: window.screen ?? NSScreen.main)
+                    return
+                }
+                self.behaviorBeforeAnchor = window.collectionBehavior
+                // Onto the desktop shown, the anchor's, as it comes to the front; then kept there: with
+                // `moveToActiveSpace` left on, the window followed to whatever desktop was shown when it next came
+                // to the front (a permission dialog took macOS to the first desktop, and the window went with it).
+                window.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+                self.joiningAnchor = true
+                self.enterEdges(window, on: screen)
+                window.makeKeyAndOrderFront(nil)
+                self.settleLevel()
+                Debug.log("edges", "on its own desktop: \(NSStringFromRect(window.frame)), on the desktop shown \(window.isOnActiveSpace)")
+            }
         }
+    }
+
+    /// Over the whole screen, the row beside the notch too.
+    private func enterEdges(_ window: ShellWindow, on screen: NSScreen?) {
+        guard let screen else { return }
+        window.edgeToEdge = true
+        shell.fullScreen = true
+        resetMenuBar()
+        setOptions(BrowserWindow.hiddenOptions)
+        window.isMovable = false
+        window.setFrame(screen.frame, display: true, animate: anchor == nil)
+        settleToggle()
+    }
+
+    private func settleToggle() {
         shell.topBarShown = false
         shell.sidebarShown = false
         lights?.refresh()
@@ -1792,6 +1941,8 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     func windowDidEndLiveResize(_ notification: Notification) { Session.touch() }
 
     func windowDidResignKey(_ notification: Notification) {
+        rowCover.hide()
+        settleLevel()
         if edgeToEdge { Debug.log("edges", "not key: \(spaceState())") }
         guard !shell.editingAddress else { return }
         shell.sidebarShown = false
@@ -1807,6 +1958,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     /// moment, and a swipe let go before halfway goes back. The video came
     /// back as the swipe began and stayed back when it didn't happen.
     func windowDidChangeOcclusionState(_ notification: Notification) {
+        if joiningAnchor, anchor != nil, let window, window.isOnActiveSpace, window.occlusionState.contains(.visible) {
+            joiningAnchor = false
+            window.collectionBehavior = [.fullScreenAuxiliary]
+            Debug.log("edges", "kept on its own desktop")
+        }
         followOcclusionWithEdges()
         guard let window, let tab = shell.selected else { return }
         if window.occlusionState.contains(.visible) {
@@ -1868,6 +2024,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
 
     func windowDidBecomeKey(_ notification: Notification) {
         Extensions.shared.controller.didFocusWindow(self)
+        settleLevel()
         // The menu bar and the Dock hide for a window in Backlight's full
         // screen only. Only what it set is taken back: macOS's own full
         // screen sets these options itself, and clearing them there left the
@@ -1876,7 +2033,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             Debug.log("edges", "key: \(spaceState())")
             syncEdgeOptions()
         } else if NSApp.presentationOptions == BrowserWindow.autoHideOptions || NSApp.presentationOptions == BrowserWindow.hiddenOptions {
-            NSApp.presentationOptions = []
+            setOptions([])
         }
     }
 
@@ -1892,10 +2049,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         guard edgeToEdge, let window else { return }
         if window.isOnActiveSpace {
             resetMenuBar()
-            NSApp.presentationOptions = BrowserWindow.hiddenOptions
+            setOptions(BrowserWindow.hiddenOptions)
         } else if NSApp.presentationOptions.contains(.hideMenuBar) || NSApp.presentationOptions.contains(.autoHideMenuBar) {
             resetMenuBar()
-            NSApp.presentationOptions = []
+            setOptions([])
         }
     }
 
@@ -1913,7 +2070,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         } else if options.contains(.hideMenuBar) || options.contains(.autoHideMenuBar) {
             Debug.log("edges", "out of sight: \(spaceState())")
             resetMenuBar()
-            NSApp.presentationOptions = []
+            setOptions([])
         }
     }
 
@@ -1964,15 +2121,32 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         window.level = .statusBar
         coverTimer?.invalidate()
         coverTimer = Timer.scheduledTimer(withTimeInterval: BrowserWindow.coverFor, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.window?.level = .normal }
+            MainActor.assumeIsolated {
+                self?.coverTimer = nil
+                self?.settleLevel()
+            }
         }
+    }
+
+    /// Where the window stands when nothing is being covered for a moment. On the anchor's desktop (SpaceAnchor.swift)
+    /// macOS leaves the hidden menu bar there as a black strip over the row beside the notch (reported), so the window
+    /// stands above it while the bars are hidden and it has the keyboard; with the pointer bringing the menu bar or
+    /// the Dock out, or another window of the app in front (a dialog), it is at the ordinary level again.
+    private var restingLevel: NSWindow.Level {
+        anchor != nil && edgeToEdge && !edgesAuto && window?.isKeyWindow == true ? .statusBar : .normal
+    }
+
+    private func settleLevel() {
+        guard coverTimer == nil, let window, window.level != restingLevel else { return }
+        window.level = restingLevel
     }
 
     private func setEdgesAuto(_ auto: Bool, covering: Bool, because why: @autoclosure () -> String) {
         guard auto != edgesAuto else { return }
         edgesAuto = auto
         if covering { coverMenuBar() }
-        NSApp.presentationOptions = auto ? BrowserWindow.autoHideOptions : BrowserWindow.hiddenOptions
+        setOptions(auto ? BrowserWindow.autoHideOptions : BrowserWindow.hiddenOptions)
+        settleLevel()
         Debug.log("edges", "\(auto ? "auto-hiding" : "hidden"): \(why())")
     }
 
@@ -1981,7 +2155,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         // window of the app) in front, hiding the menu bar again raised this
         // window over the Settings window for the moment the cover lasts, and
         // it came back after it (seen: "not key" in the log, then "hidden").
-        guard edgeToEdge, NSApp.isActive, window?.isKeyWindow == true, let screen = window?.screen else { return }
+        guard edgeToEdge, NSApp.isActive, let window, window.isKeyWindow, let screen = window.screen else { return }
         // A scrolling screenshot runs to the top pixel: the menu bar and the Dock do not come out meanwhile.
         if scrollShot != nil {
             setEdgesAuto(false, covering: false, because: "scrolling screenshot")
@@ -2010,9 +2184,39 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             edgeSince = nil
             if now.timeIntervalSince(since) >= BrowserWindow.pushTime { holdAuto(for: BrowserWindow.heldFor) }
         }
-        let held = now < heldUntil
-        setEdgesAuto(atTop || held || dockHeld || menuBarDown, covering: fromTop > 60 && !menuBarDown && !held,
-                     because: "\(Int(fromTop)) pt from the top\(atTop ? ", at the edge" : "")\(held ? ", held" : "")\(dockHeld ? ", Dock zone" : "")\(menuBarDown ? ", menu bar down" : "")")
+        var held = now < heldUntil
+        var barDown = menuBarDown
+        if anchor != nil {
+            // On the anchor's desktop the menu bar is gone the moment the window stands over it again, so it goes as
+            // soon as the pointer is below its row: not a moment later (it stayed for the hold, reported), nor on the
+            // next look at it (menuBarMoved).
+            let row = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : (NSApp.mainMenu?.menuBarHeight ?? 24)
+            if fromTop > row + 6 {
+                held = false
+                heldUntil = .distantPast
+                barDown = menuOpen
+            }
+            let auto = atTop || held || dockHeld || barDown
+            // The Dock out without the menu bar over the row beside the notch (RowCover): a picture of the row is
+            // taken as the pointer comes near the Dock, and the strip goes up before the options change.
+            // Two points more than the row: macOS draws a line under the menu bar too.
+            if fromDock <= BrowserWindow.dockZone { pictureRow(of: window, row: row + 2) } else { rowShot = nil }
+            if auto, dockHeld, !atTop, !barDown {
+                var clockAt: NSRect?
+                if clock.alphaValue > 0.5 {
+                    clockAt = root.convert(clock.frame, to: nil)
+                    clockAt?.origin.y -= window.frame.height - (row + 2)
+                }
+                rowCover.show(on: screen, row: row + 2, image: rowShot?.image, at: rowShot?.frame ?? .zero, clockAt: clockAt)
+            } else {
+                rowCover.hide()
+            }
+            setEdgesAuto(auto, covering: false,
+                         because: "\(Int(fromTop)) pt from the top\(atTop ? ", at the edge" : "")\(held ? ", held" : "")\(dockHeld ? ", Dock zone" : "")\(barDown ? ", menu bar down" : "")")
+            return
+        }
+        setEdgesAuto(atTop || held || dockHeld || barDown, covering: fromTop > 60 && !barDown && !held,
+                     because: "\(Int(fromTop)) pt from the top\(atTop ? ", at the edge" : "")\(held ? ", held" : "")\(dockHeld ? ", Dock zone" : "")\(barDown ? ", menu bar down" : "")")
     }
 
     /// The pointer pushed against the top: macOS may be part of the way
@@ -2025,8 +2229,37 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         }
     }
 
+    /// The strip over the menu bar's row while the Dock is out on the anchor's desktop, and the picture it shows.
+    private let rowCover = RowCover()
+    private var rowShot: (image: NSImage?, frame: NSRect)?
+    private var rowShooting = false
+
+    /// A picture of the page where it is in the row beside the notch, once each time the pointer comes near the Dock.
+    private func pictureRow(of window: NSWindow, row: CGFloat) {
+        guard rowShot == nil, !rowShooting else { return }
+        let strip = NSRect(x: 0, y: window.frame.height - row, width: window.frame.width, height: row)
+        guard let web = shownWeb, web.window === window else { rowShot = (nil, .zero); return }
+        let inWeb = web.convert(strip, from: nil).intersection(web.bounds)
+        guard !inWeb.isEmpty else { rowShot = (nil, .zero); return }
+        var at = web.convert(inWeb, to: nil)
+        at.origin.y -= strip.minY
+        let config = WKSnapshotConfiguration()
+        config.rect = inWeb
+        rowShooting = true
+        web.takeSnapshot(with: config) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.rowShooting = false
+                self.rowShot = (image, at)
+                if self.rowCover.isShown { self.rowCover.place(image, at: at) }
+            }
+        }
+    }
+
     func windowWillClose(_ notification: Notification) {
-        if edgeToEdge { NSApp.presentationOptions = [] }
+        rowCover.hide()
+        if edgeToEdge { setOptions([]) }
+        if let anchor { self.anchor = nil; letGo(anchor) }
         toastTimer.invalidate()
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []

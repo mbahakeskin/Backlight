@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 /// The lists that open over the page: each a glass card with a search field,
 /// put away with Esc or a click outside.
 enum Panel: String, CaseIterable {
-    case history, bookmarks, downloads, archive, settings, popout
+    case history, bookmarks, downloads, archive, settings, popout, shortcuts, about
 
     var title: String {
         switch self {
@@ -14,6 +14,8 @@ enum Panel: String, CaseIterable {
         case .archive: "Archived Tabs"
         case .settings: "Settings"
         case .popout: "Extension"
+        case .shortcuts: "Keyboard Shortcuts"
+        case .about: "About Backlight"
         }
     }
 }
@@ -56,6 +58,10 @@ struct PanelView: View {
             }
             .frame(width: 720, height: 560)
             .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        } else if panel == .about {
+            AboutCard(window: window)
+                .frame(width: 380)
+                .glassEffect(.regular, in: .rect(cornerRadius: 18))
         } else if panel == .popout {
             if let popout = shell.popout, let web = popout.tab.webView {
                 PopoutHolder(web: web)
@@ -118,7 +124,12 @@ struct PanelView: View {
                 .disabled(!Downloads.shared.items.contains { !$0.isActive })
         case .archive:
             Button("Clear") { Archive.shared.clear() }.buttonStyle(.borderless)
-        case .bookmarks, .settings, .popout:
+        case .bookmarks:
+            Button("New Folder") {
+                if let name = BookmarkTree.askName("New Folder", value: "") { Bookmarks.shared.makeFolder(name) }
+            }
+            .buttonStyle(.borderless)
+        case .settings, .popout, .shortcuts, .about:
             EmptyView()
         }
     }
@@ -144,14 +155,19 @@ struct PanelView: View {
                 }
             }
         case .bookmarks:
+            if query.isEmpty {
+                BookmarkTree(window: window)
+            } else {
+            // Searched: one list, each with the folder it is in.
             let marks = Bookmarks.shared.search(query)
-            if marks.isEmpty { empty(query.isEmpty ? "No bookmarks yet. ⌘D keeps the page you are on." : "Nothing matches") }
+            if marks.isEmpty { empty("Nothing matches") }
             ForEach(marks) { mark in
-                PanelRow(title: mark.title, url: mark.url, detail: nil) {
+                PanelRow(title: mark.title, url: mark.url, detail: mark.folder.map { Bookmarks.shared.path(of: $0).joined(separator: " / ") }) {
                     window.openFromPanel(mark.url)
                 } remove: {
                     Bookmarks.shared.remove([mark.id])
                 }
+            }
             }
         case .archive:
             let entries = Archive.shared.search(query)
@@ -168,7 +184,30 @@ struct PanelView: View {
             let items = Downloads.shared.items
             if items.isEmpty { empty("No downloads") }
             ForEach(items) { DownloadRow(item: $0) }
-        case .settings, .popout:
+        case .shortcuts:
+            let sections = Shortcuts.sections(matching: query)
+            if sections.isEmpty { empty("Nothing matches") }
+            ForEach(sections) { section in
+                Text(section.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                ForEach(section.rows) { row in
+                    HStack {
+                        Text(row.title).lineLimit(1)
+                        Spacer(minLength: 12)
+                        Text(row.keys)
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                }
+            }
+        case .settings, .popout, .about:
             EmptyView()
         }
     }
@@ -415,5 +454,36 @@ private struct RowButton: View {
         .onHover { hovering = $0 }
         .help(title)
         .accessibilityLabel("\(title) \(subject)")
+    }
+}
+
+/// Backlight menu › About Backlight: the icon, the name, the version, who made it and where it lives.
+struct AboutCard: View {
+    let window: BrowserWindow
+    private static let home = URL(string: "https://github.com/mbahakeskin/Backlight")!
+
+    private var version: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String
+        return build.map { "Version \(short) (\($0))" } ?? "Version \(short)"
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+                .padding(.bottom, 4)
+            Text("Backlight").font(.system(size: 20, weight: .semibold))
+            Text(version).font(.system(size: 12)).foregroundStyle(.secondary).textSelection(.enabled)
+            Text("Made by Mehmet Baha Keskin").font(.system(size: 12)).padding(.top, 8)
+            // In a tab of this window, not whatever browser the Mac opens links with.
+            Button("github.com/mbahakeskin/Backlight") { window.openFromPanel(AboutCard.home) }
+                .buttonStyle(.link)
+                .font(.system(size: 12))
+        }
+        .padding(.vertical, 28)
+        .frame(maxWidth: .infinity)
     }
 }

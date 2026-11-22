@@ -28,7 +28,7 @@ extension AgentTools {
         "fill": "Set a field by ref, label or selector: text, choice, or true false.",
         "fill_form": "Fill many fields [{ref or label, value}] in one call, then submit (Enter, or click submit_ref or submit_label).",
         "search": "Search the site: finds its search field, types the query, Enter.",
-        "read_pages": "Read up to 25 addresses in one call: each page's text, links optional.",
+        "read_pages": "Read up to 25 addresses in one call: each page's text, links optional. extract: JavaScript run on each page, and only what it returns comes back.",
         "upload": "Give files (full paths) to a file field ref. The person is asked.",
         "dialog": "Answer the page's alert, confirm or prompt.",
         "wait": "Wait seconds, or until text, gone, selector, url_contains or network_idle.",
@@ -79,6 +79,7 @@ extension AgentTools {
         "picture": "number a region or tile screenshot gave, for x y in it",
         "expect": "{text, gone, selector, url_contains, seconds}: fails if the page isn't so",
         "args": "values for the code, read there as args.name",
+        "extract": "async JS body run on each page; return only what you need",
         "main": "only the main area, without menu and footer",
         "structured": "products the page declares: name, brand, price, stock",
         "from_tab": "first tab number", "to_tab": "last tab number",
@@ -111,6 +112,15 @@ extension AgentTools {
         return dict
     }
 
+    /// What Claude Code loads before the first turn, so no turn goes on looking them up: the tools the agents
+    /// measured used in nearly every task. With fewer (the first six only), an agent that needed `key` or
+    /// `navigate` called them without their parameters and lost a turn to the error each time.
+    static let upfront: Set<String> = ["open", "navigate", "read_page", "read_text", "read_pages", "find", "click", "type", "fill",
+                                       "key", "wait", "screenshot", "close"]
+    /// How long an answer each reader may give before Claude Code puts it in a file instead (50,000 characters
+    /// unless a tool says; its 25,000-token limit holds besides, which is why `read_pages` keeps under 80,000).
+    static let longest: [String: Int] = ["read_pages": 100_000, "read_text": 100_000, "read_page": 100_000, "source": 100_000]
+
     /// The short list the agent is handed.
     static let catalogue: [[String: Any]] = {
         var short: [[String: Any]] = full.map { tool in
@@ -118,6 +128,13 @@ extension AgentTools {
             let name = tool["name"] as? String ?? ""
             out["description"] = lines[name] ?? String((tool["description"] as? String ?? "").split(separator: ".").first ?? "")
             if let schema = tool["inputSchema"] { out["inputSchema"] = terse(schema) }
+            // For Claude Code: the tools nearly every task starts with are loaded at once, so no turn goes on
+            // looking them up (it defers the rest behind its tool search); the big readers may answer long
+            // without the answer being put in a file the agent then has to read in another turn.
+            var meta: [String: Any] = [:]
+            if upfront.contains(name) { meta["anthropic/alwaysLoad"] = true }
+            if let most = longest[name] { meta["anthropic/maxResultSizeChars"] = most }
+            if !meta.isEmpty { out["_meta"] = meta }
             return out
         }
         short.append([

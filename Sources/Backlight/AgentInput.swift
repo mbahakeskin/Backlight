@@ -24,10 +24,19 @@ enum AgentInput {
                                   context: nil, eventNumber: number, clickCount: count, pressure: type == .leftMouseUp || type == .rightMouseUp ? 0 : 1)
     }
 
+    /// WebKit's own way in for a pointer move made in code (WKWebView, private). A WKWebView takes moves from
+    /// its tracking area, which AppKit feeds only for a window that is really key in an active app: a move sent
+    /// through the window, or to the view's `mouseMoved`, reached a page in the background (Backlight not the app
+    /// in front, or the page backstage) never, and its `:hover`, menus and hints stayed as they were.
+    private static let simulateMove = NSSelectorFromString("_simulateMouseMove:")
+
     static func move(_ web: WKWebView, to point: CGPoint) {
         guard let event = mouse(.mouseMoved, web, at: point, count: 0, modifiers: []) else { return }
-        // Through the window, as the person's pointer comes: a move handed straight to the
-        // view doesn't reach the page, and hover styles and menus stay as they were.
+        if web.responds(to: simulateMove) {
+            web.perform(simulateMove, with: event)
+            return
+        }
+        // Without it, through the window, as the person's pointer comes.
         let was = web.window?.acceptsMouseMovedEvents
         web.window?.acceptsMouseMovedEvents = true
         web.window?.sendEvent(event)

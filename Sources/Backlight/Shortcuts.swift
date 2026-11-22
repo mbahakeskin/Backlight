@@ -5,20 +5,10 @@ import SwiftUI
 // read off the menus as they are (so the list can't be out of date), and the
 // few things the pointer does with a key held, which no menu has.
 enum ShortcutsWindow {
-    private static var window: NSWindow?
-
-    static func show() {
-        // Made again each time: the menus may have changed (Develop and Debug come and go).
-        window?.close()
-        let made = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 640),
-                            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        made.title = "Keyboard Shortcuts"
-        made.isReleasedWhenClosed = false
-        made.contentView = NSHostingView(rootView: ShortcutsView(sections: Shortcuts.sections()))
-        made.center()
-        window = made
-        made.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+    /// A panel over the front window, as Settings is (a new window if there is none); a click beside it closes it.
+    @MainActor static func show() {
+        let window = Windows.front ?? Windows.open(empty: true)
+        if window.shell.panel != .shortcuts { window.showPanel(.shortcuts) }
     }
 }
 
@@ -53,6 +43,18 @@ enum Shortcuts {
         return sections
     }
 
+    /// The sections with only the rows whose name or keys hold `query`; all of them for none. Read off the menus each
+    /// time, so the list follows them (Develop and Debug come and go).
+    @MainActor static func sections(matching query: String) -> [ShortcutSection] {
+        let words = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let all = sections()
+        guard !words.isEmpty else { return all }
+        return all.compactMap { section in
+            let rows = section.rows.filter { $0.title.lowercased().contains(words) || $0.keys.lowercased().contains(words) }
+            return rows.isEmpty ? nil : ShortcutSection(title: section.title, rows: rows)
+        }
+    }
+
     @MainActor private static func collect(_ menu: NSMenu, into rows: inout [ShortcutSection.Row]) {
         for item in menu.items where !item.isSeparatorItem && !item.isHidden {
             if let sub = item.submenu { collect(sub, into: &rows); continue }
@@ -81,49 +83,3 @@ enum Shortcuts {
     }
 }
 
-struct ShortcutsView: View {
-    let sections: [ShortcutSection]
-    // `@State` is a macro in the macOS 27 SDK whose plugin ships only with
-    // Xcode, so the State it would expand to is stored by hand.
-    private var _filter = State(initialValue: "")
-    private var filter: String {
-        get { _filter.wrappedValue }
-        nonmutating set { _filter.wrappedValue = newValue }
-    }
-
-    init(sections: [ShortcutSection]) { self.sections = sections }
-
-    private var shown: [ShortcutSection] {
-        let words = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !words.isEmpty else { return sections }
-        return sections.compactMap { section in
-            let rows = section.rows.filter { $0.title.lowercased().contains(words) || $0.keys.lowercased().contains(words) }
-            return rows.isEmpty ? nil : ShortcutSection(title: section.title, rows: rows)
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            TextField("Search shortcuts", text: _filter.projectedValue)
-                .textFieldStyle(.roundedBorder)
-                .padding(12)
-            Form {
-                ForEach(shown) { section in
-                    Section(section.title) {
-                        ForEach(section.rows) { row in
-                            HStack {
-                                Text(row.title)
-                                Spacer()
-                                Text(row.keys)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            .formStyle(.grouped)
-        }
-        .frame(minWidth: 420, minHeight: 360)
-    }
-}

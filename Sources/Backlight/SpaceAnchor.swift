@@ -38,6 +38,19 @@ final class SpaceAnchor: NSObject, NSWindowDelegate {
         window.collectionBehavior = [.fullScreenPrimary, .ignoresCycle]
         window.animationBehavior = .none
         window.delegate = self
+        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(button)?.isHidden = true }
+        window.contentView?.wantsLayer = true
+        window.contentView?.layer?.contentsGravity = .resize
+    }
+
+    /// What it shows while macOS animates it into and out of full screen: the browser's window as it was, so it is the
+    /// page that grows to the screen and shrinks back, as in macOS's own full screen (a black window grew first and
+    /// the page followed, and the other way round; reported). Black again with none.
+    func show(_ picture: CGImage?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        window.contentView?.layer?.contents = picture
+        CATransaction.commit()
     }
 
     /// Into full screen; `then` once its desktop is the one shown.
@@ -75,8 +88,7 @@ final class SpaceAnchor: NSObject, NSWindowDelegate {
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
-        window.orderOut(nil)
-        window.close()
+        // The browser's window shows in its place first, then this goes: no moment with neither.
         if leaving {
             let then = exited
             exited = nil
@@ -84,6 +96,8 @@ final class SpaceAnchor: NSObject, NSWindowDelegate {
         } else {
             onLeftByItself?()
         }
+        window.orderOut(nil)
+        window.close()
     }
 
     /// To the front of its desktop (under the browser's window, which is ordered after it).
@@ -115,15 +129,26 @@ final class RowCover {
 
     /// Over the top `row` points of `screen`.
     func show(on screen: NSScreen, row: CGFloat) {
+        prepare(on: screen, row: row)
+        panel?.alphaValue = 1
+        isShown = true
+    }
+
+    /// In place and clear, ahead of being shown (from the start of full screen): ordered in at the moment it was
+    /// wanted, the first time it came a frame late, and the menu bar flickered past (reported).
+    func prepare(on screen: NSScreen, row: CGFloat) {
         // The top half of the screen, not the row alone: a window as short as the row, at this level, was put
         // 280 points down the screen by the window server whatever its frame (measured); one this tall stays.
         let half = NSRect(x: screen.frame.minX, y: screen.frame.midY, width: screen.frame.width, height: screen.frame.maxY - screen.frame.midY)
         let panel = self.panel ?? make(half)
         self.panel = panel
         if panel.frame != half { panel.setFrame(half, display: false) }
-        band.frame = NSRect(x: 0, y: half.height - row, width: half.width, height: row)
-        if !isShown || !panel.isVisible { panel.orderFrontRegardless() }
-        isShown = true
+        let strip = NSRect(x: 0, y: half.height - row, width: half.width, height: row)
+        if band.frame != strip { band.frame = strip }
+        if !panel.isVisible {
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
+        }
     }
 
     /// The row as the browser's window has it now.
@@ -138,11 +163,18 @@ final class RowCover {
         CATransaction.commit()
     }
 
+    /// Clear again, still in place.
     func hide() {
         guard isShown else { return }
         isShown = false
-        panel?.orderOut(nil)
+        panel?.alphaValue = 0
         band.layer?.contents = nil
+    }
+
+    /// Out (the pointer away from the Dock, or full screen over).
+    func remove() {
+        hide()
+        panel?.orderOut(nil)
     }
 
     private func make(_ frame: NSRect) -> Strip {

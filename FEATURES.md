@@ -69,10 +69,11 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   history from Chrome and what is built on it, Safari and Firefox; and, from
   Chrome and its kin, a password file (CSV) to hand to a password manager.
 - YouTube is told it is Safari, what Backlight is. Settings › Tabs can tell it
-  Chrome instead, for its Download (Premium); on accounts where YouTube checks
-  the browser, it then stops videos at about 0:45, and the tab goes back to
-  Safari by itself, the video going on where it stopped. An experimental switch
-  tells only YouTube's servers Chrome and the page's script the truth.
+  Chrome instead, for its Download (Premium, in the video's … menu): only its
+  servers are told so, the page's own script is told the truth, as YouTube's
+  check of the browser expects (a switch under it tells both). If YouTube
+  still stops a video at about 0:45, the tab goes back to Safari by itself and
+  the video goes on where it stopped.
 - Ads and trackers, YouTube's ads included, are blocked by uBlock Origin
   Lite, the Safari extension that comes with its app from the App Store.
   Backlight adds it when that app is on the Mac, running it from a copy of

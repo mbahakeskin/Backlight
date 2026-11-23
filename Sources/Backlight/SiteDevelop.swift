@@ -77,7 +77,10 @@ final class SiteDevelop {
     /// from that check seeing "Chrome" in a WebKit page (YouTubeGuard); whether one consistent to the script is enough,
     /// with the page's own data still saying Chrome, can only be seen on an account YouTube checks: none here is.
     static let youTubeTruthKey = "youtube.chromeAgent.scriptSafari"
-    static var scriptTruthOn: Bool { chromeAgentOn && UserDefaults.standard.bool(forKey: youTubeTruthKey) }
+    /// On unless turned off: with it, Download is still offered (measured on a Premium account, 2026-11-24: the
+    /// video's "…" menu had Download with Chrome told to the servers only, as with Chrome told to both, and not with
+    /// Safari's agent), and the page's script sees what BotGuard sees.
+    static var scriptTruthOn: Bool { chromeAgentOn && UserDefaults.standard.object(forKey: youTubeTruthKey) as? Bool ?? true }
 
     /// What WebKit says it is in Backlight, with no agent of the tab's own.
     static var ownAgent: String { "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) \(Web.userAgentName)" }

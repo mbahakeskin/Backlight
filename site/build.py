@@ -12,7 +12,7 @@ import base64, html, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "src")
 NAME = "Backlight"   # one place to change the name
-VERSION = "0.9.9"
+VERSION = "0.9.10"
 SIZE = "2.2 MB"      # the release zip
 
 def esc(s): return html.escape(s, quote=False)

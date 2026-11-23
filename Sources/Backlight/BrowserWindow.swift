@@ -174,6 +174,27 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         watchPointer()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(spaceChanged(_:)),
                                                           name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appBecameActive(_:)),
+                                               name: NSApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillBecomeActive(_:)),
+                                               name: NSApplication.willBecomeActiveNotification, object: nil)
+    }
+
+    /// Up over the menu bar's strip before macOS hides the menu bar for this app: raised only once the window had
+    /// the keyboard, the hidden menu bar showed black for a moment on every return from another app (reported).
+    @objc private func appWillBecomeActive(_ notification: Notification) {
+        guard anchor != nil, edgeToEdge, !edgesAuto, let window, NSApp.keyWindow == nil || NSApp.keyWindow === window else { return }
+        coverTimer?.invalidate()
+        coverTimer = nil
+        window.level = .statusBar
+    }
+
+    /// Back in front after a helper's dialog on the anchor's desktop: macOS made no window key (measured), so this one
+    /// is, and it stands over the menu bar's strip again.
+    @objc private func appBecameActive(_ notification: Notification) {
+        guard anchor != nil, edgeToEdge, let window, window.isOnActiveSpace, !Spaces.missionControl else { return }
+        if NSApp.keyWindow == nil { window.makeKey() }
+        settleLevel()
     }
 
     @available(*, unavailable)
@@ -1928,11 +1949,19 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
                 if let frame { window.setFrame(frame, display: true, animate: true) }
                 return
             }
-            // Back to the desktop it came from as the anchor's goes, then its frame there.
+            // Back to the desktop it came from as the anchor's goes, then its frame there. The anchor, showing this
+            // window, is what macOS animates out of full screen; this window waits unseen.
             self.anchor = nil
+            hideRowCover()
+            rowCover.remove()
+            if anchor.isInFullScreen {
+                anchor.show(picture(of: window))
+                window.alphaValue = 0
+            }
             window.collectionBehavior = (behaviorBeforeAnchor ?? [.fullScreenPrimary]).union(.moveToActiveSpace)
             letGo(anchor) { [weak self, weak window] in
                 guard let self, let window else { return }
+                window.alphaValue = 1
                 window.makeKeyAndOrderFront(nil)
                 window.collectionBehavior = self.behaviorBeforeAnchor ?? [.fullScreenPrimary]
                 self.behaviorBeforeAnchor = nil
@@ -1944,6 +1973,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             windowedFrame = window.frame
             let anchor = SpaceAnchor(over: window.frame)
             self.anchor = anchor
+            // The anchor, showing this window, is what macOS animates into full screen; this window waits unseen.
+            anchor.show(picture(of: window))
+            window.alphaValue = 0
             // Out of full screen by some other way (Mission Control): the window comes out with it.
             anchor.onLeftByItself = { [weak self, weak anchor] in
                 guard let self, let anchor, self.anchor === anchor else { return }
@@ -1955,6 +1987,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
                     // macOS wouldn't: Backlight's own full screen on this desktop, as before.
                     self.anchor = nil
                     self.letGo(anchor)
+                    window.alphaValue = 1
                     self.enterEdges(window, on: window.screen ?? NSScreen.main)
                     return
                 }
@@ -1967,6 +2000,13 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
                 self.enterEdges(window, on: screen)
                 window.makeKeyAndOrderFront(nil)
                 self.settleLevel()
+                window.alphaValue = 1
+                anchor.show(nil)
+                // The strip over the menu bar's row in place, clear, for the Dock (RowCover.prepare); a picture taken
+                // now too, so the first one taken then is not the first ever.
+                let row = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : (NSApp.mainMenu?.menuBarHeight ?? 24)
+                self.rowCover.prepare(on: screen, row: (row + 2).rounded(.up))
+                _ = self.rowImage(of: window, row: 1)
                 Debug.log("edges", "on its own desktop: \(NSStringFromRect(window.frame)), on the desktop shown \(window.isOnActiveSpace)")
             }
         }
@@ -2027,7 +2067,10 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     func windowDidChangeOcclusionState(_ notification: Notification) {
         if joiningAnchor, anchor != nil, let window, window.isOnActiveSpace, window.occlusionState.contains(.visible) {
             joiningAnchor = false
-            window.collectionBehavior = [.fullScreenAuxiliary]
+            // Managed by the desktops though it stands above the ordinary level (restingLevel): without, the app
+            // made active from another desktop brought the window there (measured: another app quit on its own
+            // full-screen desktop, macOS went to the first and made Backlight active, and the window went along).
+            window.collectionBehavior = [.fullScreenAuxiliary, .managed]
             Debug.log("edges", "kept on its own desktop")
         }
         followOcclusionWithEdges()
@@ -2184,7 +2227,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     private static let coverFor: TimeInterval = 0.25
 
     private func coverMenuBar() {
-        guard let window, window.isOnActiveSpace else { return }
+        guard let window else { return }
         window.level = .statusBar
         coverTimer?.invalidate()
         coverTimer = Timer.scheduledTimer(withTimeInterval: BrowserWindow.coverFor, repeats: false) { [weak self] _ in
@@ -2198,17 +2241,18 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     /// Where the window stands when nothing is being covered for a moment. On the anchor's desktop (SpaceAnchor.swift)
     /// macOS leaves the hidden menu bar there as a black strip over the row beside the notch (reported), so the window
     /// stands above it while the bars are hidden and it has the keyboard; with the pointer bringing the menu bar or
-    /// the Dock out, or another window of the app in front (a dialog), it is at the ordinary level again.
+    /// the Dock out, or anything else in front (another app, a dialog, Settings), it is at the ordinary level again,
+    /// where macOS's desktops and Mission Control treat it as any window (kept up with another app in front, Mission
+    /// Control showed it over itself, reported). The level changes whether its desktop is shown or not: changed only
+    /// once it was, the whole page flashed black on every return (reported); the window being managed by the desktops
+    /// (windowDidChangeOcclusionState) keeps a change made away from carrying it to the desktop shown.
     private var restingLevel: NSWindow.Level {
-        anchor != nil && edgeToEdge && !edgesAuto && window?.isKeyWindow == true ? .statusBar : .normal
+        guard anchor != nil, edgeToEdge, !edgesAuto, let window else { return .normal }
+        return window.isKeyWindow || (NSApp.isActive && NSApp.keyWindow == nil) ? .statusBar : .normal
     }
 
-    /// Not while the window is on a desktop not shown: a new level there brought the window onto the desktop shown,
-    /// at the status bar's level over everything (another app quit on its own full-screen desktop, macOS went to the
-    /// first desktop and made Backlight active, and the window left its own desktop for it, measured). It settles
-    /// when its desktop is shown again (spaceChanged).
     private func settleLevel() {
-        guard coverTimer == nil, let window, window.level != restingLevel, window.isOnActiveSpace else { return }
+        guard coverTimer == nil, let window, window.level != restingLevel else { return }
         window.level = restingLevel
     }
 
@@ -2268,12 +2312,12 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
                 barDown = menuOpen
             }
             let auto = atTop || held || dockHeld || barDown
+            // Whole points: the row is 37.5 here, and a picture of 39.5 points came out 39 (78 pixels), leaving a
+            // pixel row of the strip's black under it (reported, measured).
+            let strip = (row + 2).rounded(.up)
             // The Dock out without the menu bar over the row beside the notch (RowCover, showing this window's row as
             // it is): the strip goes up, with the row in it, before the options change.
             if auto, dockHeld, !atTop, !barDown {
-                // Whole points: the row is 37.5 here, and a picture of 39.5 points came out 39 (78 pixels), leaving
-                // a pixel row of the strip's black under it (reported, measured).
-                let strip = (row + 2).rounded(.up)
                 if !rowCover.isShown, let first = rowImage(of: window, row: strip) { rowCover.mirror(first) }
                 rowCover.show(on: screen, row: strip)
                 mirrorRow(row: strip)
@@ -2321,6 +2365,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         return create(rect, .optionIncludingWindow, CGWindowID(window.windowNumber), [.bestResolution, .boundsIgnoreFraming])?.takeRetainedValue()
     }
 
+    /// The whole window as it is on the screen, for the anchor to show while it goes into full screen or out.
+    private func picture(of window: NSWindow) -> CGImage? { rowImage(of: window, row: window.frame.height) }
+
     /// The row into the strip 30 times a second while it is up, so what the page does there goes on showing. It costs
     /// about 4% of a core here and 10% in the window server, for the seconds the Dock is out (measured at 60 a second).
     private func mirrorRow(row: CGFloat) {
@@ -2344,6 +2391,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
 
     func windowWillClose(_ notification: Notification) {
         hideRowCover()
+        rowCover.remove()
         if edgeToEdge { setOptions([]) }
         if let anchor { self.anchor = nil; letGo(anchor) }
         toastTimer.invalidate()

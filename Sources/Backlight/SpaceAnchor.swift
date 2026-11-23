@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 // A desktop of its own for Backlight's full screen beside the notch.
 //
@@ -96,8 +97,10 @@ final class SpaceAnchor: NSObject, NSWindowDelegate {
 // full-screen one, and the Dock comes out only with the menu bar auto-hiding (macOS hides the menu bar outright only
 // with the Dock): so touching the Dock brought the menu bar down over the row beside the notch (reported). The
 // window can't stand over the menu bar meanwhile, as it does at rest, since that is over the Dock too. So this
-// window, clear but for the menu bar's row, stands over that row while the Dock is out, showing what the browser's
-// window shows there (a picture of the page, taken as the pointer comes near the Dock; black where there is none).
+// window, clear but for the menu bar's row, stands over that row while the Dock is out, showing the browser window's
+// own row as it is on the screen, frame by frame (BrowserWindow.mirrorRow). A picture of the page taken once, with a
+// clock drawn over it again, was told apart: the page went on changing under it, and glass drawn a second time never
+// came out the same (reported, four times).
 @MainActor
 final class RowCover {
     /// Where it is put, nowhere else.
@@ -107,20 +110,11 @@ final class RowCover {
         override var canBecomeMain: Bool { false }
     }
     private var panel: Strip?
-    private let picture = NSImageView()
     private let band = NSView()
-    /// The window's clock, which would be under the strip: one of its own in the same place.
-    private lazy var clock: ClockHost = {
-        let clock = ClockHost(rootView: MenuBarClock())
-        clock.sizingOptions = []
-        clock.safeAreaRegions = []
-        return clock
-    }()
     private(set) var isShown = false
 
-    /// Over the top `row` points of `screen`, with `image` (if any) where it was taken from: `at` in the row's own coordinates.
-    /// `clockAt`: where the window's clock is, in the same coordinates, if it shows.
-    func show(on screen: NSScreen, row: CGFloat, image: NSImage?, at frame: NSRect, clockAt: NSRect?) {
+    /// Over the top `row` points of `screen`.
+    func show(on screen: NSScreen, row: CGFloat) {
         // The top half of the screen, not the row alone: a window as short as the row, at this level, was put
         // 280 points down the screen by the window server whatever its frame (measured); one this tall stays.
         let half = NSRect(x: screen.frame.minX, y: screen.frame.midY, width: screen.frame.width, height: screen.frame.maxY - screen.frame.midY)
@@ -128,27 +122,27 @@ final class RowCover {
         self.panel = panel
         if panel.frame != half { panel.setFrame(half, display: false) }
         band.frame = NSRect(x: 0, y: half.height - row, width: half.width, height: row)
-        place(image, at: frame)
-        if let clockAt {
-            clock.frame = clockAt
-            if clock.superview !== band { band.addSubview(clock) }
-        } else {
-            clock.removeFromSuperview()
-        }
         if !isShown || !panel.isVisible { panel.orderFrontRegardless() }
         isShown = true
     }
 
-    /// A newer picture, while shown. Out to whole points, so no seam of the black behind it shows.
-    func place(_ image: NSImage?, at frame: NSRect) {
-        picture.image = image
-        picture.frame = frame.integral
+    /// The row as the browser's window has it now.
+    func mirror(_ image: CGImage) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Pixel for pixel: the picture's own density, from its width against the row's, never the layer's default of
+        // 1 (softer than the window's row, reported) nor a screen's guess (a picture made at another display's
+        // density came out larger, reported); drawn as it is, never resampled.
+        if band.bounds.width > 0 { band.layer?.contentsScale = CGFloat(image.width) / band.bounds.width }
+        band.layer?.contents = image
+        CATransaction.commit()
     }
 
     func hide() {
         guard isShown else { return }
         isShown = false
         panel?.orderOut(nil)
+        band.layer?.contents = nil
     }
 
     private func make(_ frame: NSRect) -> Strip {
@@ -163,11 +157,12 @@ final class RowCover {
         panel.isExcludedFromWindowsMenu = true
         panel.animationBehavior = .none
         panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace, .ignoresCycle]
-        picture.imageScaling = .scaleAxesIndependently
         panel.contentView = NSView()
         band.wantsLayer = true
         band.layer?.backgroundColor = NSColor.black.cgColor
-        band.addSubview(picture)
+        band.layer?.contentsGravity = .topLeft
+        band.layer?.magnificationFilter = .nearest
+        band.layer?.minificationFilter = .nearest
         panel.contentView?.addSubview(band)
         return panel
     }

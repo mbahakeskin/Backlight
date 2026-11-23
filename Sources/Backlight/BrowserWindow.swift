@@ -623,8 +623,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         dockEdge = UserDefaults(suiteName: "com.apple.dock")?.string(forKey: "orientation") ?? "bottom"
         menuBarDown = false
         menuBarWasDown = false
-        rowCover.hide()
-        rowShot = nil
+        hideRowCover()
         settleLevel()
     }
 
@@ -2009,7 +2008,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     func windowDidEndLiveResize(_ notification: Notification) { Session.touch() }
 
     func windowDidResignKey(_ notification: Notification) {
-        rowCover.hide()
+        hideRowCover()
         settleLevel()
         if edgeToEdge { Debug.log("edges", "not key: \(spaceState())") }
         guard !shell.editingAddress else { return }
@@ -2185,7 +2184,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     private static let coverFor: TimeInterval = 0.25
 
     private func coverMenuBar() {
-        guard let window else { return }
+        guard let window, window.isOnActiveSpace else { return }
         window.level = .statusBar
         coverTimer?.invalidate()
         coverTimer = Timer.scheduledTimer(withTimeInterval: BrowserWindow.coverFor, repeats: false) { [weak self] _ in
@@ -2204,8 +2203,12 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         anchor != nil && edgeToEdge && !edgesAuto && window?.isKeyWindow == true ? .statusBar : .normal
     }
 
+    /// Not while the window is on a desktop not shown: a new level there brought the window onto the desktop shown,
+    /// at the status bar's level over everything (another app quit on its own full-screen desktop, macOS went to the
+    /// first desktop and made Backlight active, and the window left its own desktop for it, measured). It settles
+    /// when its desktop is shown again (spaceChanged).
     private func settleLevel() {
-        guard coverTimer == nil, let window, window.level != restingLevel else { return }
+        guard coverTimer == nil, let window, window.level != restingLevel, window.isOnActiveSpace else { return }
         window.level = restingLevel
     }
 
@@ -2265,19 +2268,17 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
                 barDown = menuOpen
             }
             let auto = atTop || held || dockHeld || barDown
-            // The Dock out without the menu bar over the row beside the notch (RowCover): a picture of the row is
-            // taken as the pointer comes near the Dock, and the strip goes up before the options change.
-            // Two points more than the row: macOS draws a line under the menu bar too.
-            if fromDock <= BrowserWindow.dockZone { pictureRow(of: window, row: row + 2) } else { rowShot = nil }
+            // The Dock out without the menu bar over the row beside the notch (RowCover, showing this window's row as
+            // it is): the strip goes up, with the row in it, before the options change.
             if auto, dockHeld, !atTop, !barDown {
-                var clockAt: NSRect?
-                if clock.alphaValue > 0.5 {
-                    clockAt = root.convert(clock.frame, to: nil)
-                    clockAt?.origin.y -= window.frame.height - (row + 2)
-                }
-                rowCover.show(on: screen, row: row + 2, image: rowShot?.image, at: rowShot?.frame ?? .zero, clockAt: clockAt)
+                // Whole points: the row is 37.5 here, and a picture of 39.5 points came out 39 (78 pixels), leaving
+                // a pixel row of the strip's black under it (reported, measured).
+                let strip = (row + 2).rounded(.up)
+                if !rowCover.isShown, let first = rowImage(of: window, row: strip) { rowCover.mirror(first) }
+                rowCover.show(on: screen, row: strip)
+                mirrorRow(row: strip)
             } else {
-                rowCover.hide()
+                hideRowCover()
             }
             setEdgesAuto(auto, covering: false,
                          because: "\(Int(fromTop)) pt from the top\(atTop ? ", at the edge" : "")\(held ? ", held" : "")\(dockHeld ? ", Dock zone" : "")\(barDown ? ", menu bar down" : "")")
@@ -2297,35 +2298,52 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         }
     }
 
-    /// The strip over the menu bar's row while the Dock is out on the anchor's desktop, and the picture it shows.
+    /// The strip over the menu bar's row while the Dock is out on the anchor's desktop, kept showing this window's row.
     private let rowCover = RowCover()
-    private var rowShot: (image: NSImage?, frame: NSRect)?
-    private var rowShooting = false
+    private var rowMirror: Timer?
 
-    /// A picture of the page where it is in the row beside the notch, once each time the pointer comes near the Dock.
-    private func pictureRow(of window: NSWindow, row: CGFloat) {
-        guard rowShot == nil, !rowShooting else { return }
-        let strip = NSRect(x: 0, y: window.frame.height - row, width: window.frame.width, height: row)
-        guard let web = shownWeb, web.window === window else { rowShot = (nil, .zero); return }
-        let inWeb = web.convert(strip, from: nil).intersection(web.bounds)
-        guard !inWeb.isEmpty else { rowShot = (nil, .zero); return }
-        var at = web.convert(inWeb, to: nil)
-        at.origin.y -= strip.minY
-        let config = WKSnapshotConfiguration()
-        config.rect = inWeb
-        rowShooting = true
-        web.takeSnapshot(with: config) { [weak self] image, _ in
+    private typealias CreateImage = @convention(c) (CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption) -> Unmanaged<CGImage>?
+    /// CGWindowListCreateImage: out of the SDK's headers since macOS 15, still in CoreGraphics; for a window of the
+    /// app's own it needs no screen recording permission (measured).
+    private static let createImage: CreateImage? = {
+        guard let handle = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
+              let found = dlsym(handle, "CGWindowListCreateImage") else { return nil }
+        return unsafeBitCast(found, to: CreateImage.self)
+    }()
+
+    /// The window's top `row` points as they are on the screen: this window alone, the menu bar or anything else
+    /// over it left out.
+    private func rowImage(of window: NSWindow, row: CGFloat) -> CGImage? {
+        guard let create = BrowserWindow.createImage else { return nil }
+        let frame = window.frame
+        let top = NSScreen.screens.first?.frame.maxY ?? frame.maxY
+        let rect = CGRect(x: frame.minX, y: top - frame.maxY, width: frame.width, height: row)
+        return create(rect, .optionIncludingWindow, CGWindowID(window.windowNumber), [.bestResolution, .boundsIgnoreFraming])?.takeRetainedValue()
+    }
+
+    /// The row into the strip 30 times a second while it is up, so what the page does there goes on showing. It costs
+    /// about 4% of a core here and 10% in the window server, for the seconds the Dock is out (measured at 60 a second).
+    private func mirrorRow(row: CGFloat) {
+        guard rowMirror == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                self.rowShooting = false
-                self.rowShot = (image, at)
-                if self.rowCover.isShown { self.rowCover.place(image, at: at) }
+                guard let self, let window = self.window, self.rowCover.isShown,
+                      let image = self.rowImage(of: window, row: row) else { return }
+                self.rowCover.mirror(image)
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        rowMirror = timer
+    }
+
+    private func hideRowCover() {
+        rowMirror?.invalidate()
+        rowMirror = nil
+        rowCover.hide()
     }
 
     func windowWillClose(_ notification: Notification) {
-        rowCover.hide()
+        hideRowCover()
         if edgeToEdge { setOptions([]) }
         if let anchor { self.anchor = nil; letGo(anchor) }
         toastTimer.invalidate()

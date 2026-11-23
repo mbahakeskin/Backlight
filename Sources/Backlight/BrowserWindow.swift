@@ -2251,8 +2251,12 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         return window.isKeyWindow || (NSApp.isActive && NSApp.keyWindow == nil) ? .statusBar : .normal
     }
 
+    /// Raised wherever its desktop is; lowered only while its desktop is shown. Left for another desktop, it stays up:
+    /// lowered then, it came back at the ordinary level on a swipe to its desktop (macOS shows the desktop first and
+    /// makes Backlight active only after), and the hidden menu bar showed black all through the swipe (reported).
     private func settleLevel() {
         guard coverTimer == nil, let window, window.level != restingLevel else { return }
+        if restingLevel.rawValue < window.level.rawValue, !window.isOnActiveSpace { return }
         window.level = restingLevel
     }
 

@@ -205,6 +205,8 @@ struct OmniboxView: View {
             // The site's colour, barely there.
             .overlay(RoundedRectangle(cornerRadius: 18).fill((tint ?? .clear).opacity(0.07)).allowsHitTesting(false))
             .animation(.easeOut(duration: 0.2), value: tint)
+            // Where the card is, for a click beside it that SwiftUI does not take (BrowserWindow.ask).
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { window.omniboxCard = $0 }
             .padding(.top, 150)
         }
         .onAppear {

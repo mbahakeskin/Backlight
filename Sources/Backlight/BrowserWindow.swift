@@ -447,6 +447,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         // (an AppKit view), and the bar then stayed out for good.
         let clicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             MainActor.assumeIsolated {
+                if let self, event.window === self.window, event.type == .leftMouseDown { self.lastPress = event.locationInWindow }
                 // For the debug log: what a click reached, so that a click that did something else can be traced.
                 if Debug.enabled, let self, event.window === self.window, event.type == .leftMouseDown {
                     let point = self.root.convert(event.locationInWindow, from: nil)
@@ -1180,6 +1181,19 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         newTabAtTop = atTop
         if omnibox == nil {
             let host = hosting(OmniboxView(shell: shell, window: self), solid: true)
+            // Beside the field, the field goes, whether SwiftUI's own tap did it or not: once, every tap in it had
+            // stopped coming through (its suggestions too; the field itself, AppKit's, still took clicks), and the
+            // field over the whole window could not be clicked away (reported). Looked at once SwiftUI has done.
+            // Where it was pressed comes from the window's own watch of presses (watchPointer): the host does not
+            // see a press SwiftUI takes.
+            (host as? SolidHost<OmniboxView>)?.onClick = { [weak self, weak host] in
+                DispatchQueue.main.async {
+                    guard let self, let host, self.omnibox === host, let pressed = self.lastPress,
+                          !self.omniboxCard.insetBy(dx: -4, dy: -4).contains(host.convert(pressed, from: nil)) else { return }
+                    Debug.log("click", "beside the address field, not taken by SwiftUI: closed here")
+                    self.dismissOmnibox()
+                }
+            }
             host.frame = root.bounds
             root.addSubview(host, positioned: .above, relativeTo: nil)
             omnibox = host
@@ -1197,6 +1211,11 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     /// A scrolling screenshot being taken (ScrollShot.swift).
     var scrollShot: ScrollShot?
     weak var peekOpener: Tab?
+
+    /// Where the address field's card is, in its host's coordinates (OmniboxView).
+    var omniboxCard = CGRect.zero
+    /// Where the last press in this window was, in its coordinates.
+    private var lastPress: NSPoint?
 
     func dismissOmnibox() {
         omnibox?.removeFromSuperview()
@@ -2503,15 +2522,54 @@ final class ShellWindow: NSWindow {
 /// The clock that stands in for the menu bar's while full screen hides it.
 struct MenuBarClock: View {
     var body: some View {
-        TimelineView(.everyMinute) { context in
-            Text(context.date, format: .dateTime.hour().minute())
-                .font(.system(size: 13, weight: .medium))
-                .monospacedDigit()
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .glassEffect(.regular, in: .capsule)
+        Text(Minute.shared.now, format: .dateTime.hour().minute())
+            .font(.system(size: 13, weight: .medium))
+            .monospacedDigit()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .glassEffect(.regular, in: .capsule)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    }
+}
+
+/// The time to the minute, for the clocks, moved on at each minute's start. It took the place of SwiftUI's
+/// TimelineView(.everyMinute): Swift's check that the clock's closure ran on the main actor, made as TimelineView
+/// called it from inside SwiftUI's update, crashed on the main thread itself (EXC_BAD_ACCESS reading an executor in
+/// swift_task_isCurrentExecutor, at 16:35:00 on 2026-11-27, after two days running; reported).
+@MainActor
+@Observable
+final class Minute {
+    static let shared = Minute()
+    private(set) var now = Date()
+    @ObservationIgnored private var timer: Timer?
+
+    private init() {
+        schedule()
+        // The Mac's clock or time zone changed, or it woke: the time and the next minute again.
+        for name in [NSNotification.Name.NSSystemClockDidChange, .NSSystemTimeZoneDidChange] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { Minute.shared.tick() }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { Minute.shared.tick() }
+        }
+    }
+
+    private func tick() {
+        now = Date()
+        schedule()
+    }
+
+    private func schedule() {
+        timer?.invalidate()
+        let next = Calendar.current.nextDate(after: Date(), matching: DateComponents(second: 0), matchingPolicy: .nextTime)
+            ?? Date().addingTimeInterval(60)
+        let timer = Timer(fire: next, interval: 0, repeats: false) { _ in
+            MainActor.assumeIsolated { Minute.shared.tick() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 }
 
@@ -2525,6 +2583,13 @@ struct MenuBarClock: View {
 final class SolidHost<V: View>: NSHostingView<V> {
     private var shield: ClickShield?
     private var frameWatch: NSObjectProtocol?
+    /// A click let go here, after SwiftUI has had it.
+    var onClick: (() -> Void)?
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        onClick?()
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         if let hit = super.hitTest(point) { return hit }

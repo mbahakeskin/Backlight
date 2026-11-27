@@ -188,7 +188,9 @@ final class RowCover {
         panel.isReleasedWhenClosed = false
         panel.isExcludedFromWindowsMenu = true
         panel.animationBehavior = .none
-        panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace, .ignoresCycle]
+        // Kept out of Mission Control: in place but clear from the start of full screen (prepare), it showed there
+        // as a small grey window beside the browser's (reported).
+        panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace, .transient, .ignoresCycle]
         panel.contentView = NSView()
         band.wantsLayer = true
         band.layer?.backgroundColor = NSColor.black.cgColor

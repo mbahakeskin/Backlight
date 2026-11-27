@@ -33,13 +33,26 @@ final class Lights: NSObject {
         ] {
             centre.addObserver(self, selector: #selector(relaid), name: name, object: window)
         }
-        if let bar = buttons.first?.superview, let container = bar.superview {
-            for view in [container, bar] + buttons {
-                view.postsFrameChangedNotifications = true
-                centre.addObserver(self, selector: #selector(relaid), name: NSView.frameDidChangeNotification, object: view)
-            }
-        }
         place()
+    }
+
+    /// The title bar's views whose frames are watched. AppKit throws them away and makes new ones whenever the window
+    /// loses its title bar and gets it back (Backlight's own full screen does that, ShellWindow.squareCorners), and the
+    /// new ones start where AppKit puts them; it also puts them back there at every change of the window's title. So the
+    /// views watched are checked each time the buttons are placed, and the new ones watched instead (measured: watching
+    /// only the first ones, the lights stayed at AppKit's place after leaving full screen from the next page title on,
+    /// until the window was resized or lost the keyboard).
+    private var watched: [NSView] = []
+
+    private func watch(_ views: [NSView]) {
+        guard views.count != watched.count || zip(views, watched).contains(where: { $0 !== $1 }) else { return }
+        let centre = NotificationCenter.default
+        for view in watched { centre.removeObserver(self, name: NSView.frameDidChangeNotification, object: view) }
+        for view in views {
+            view.postsFrameChangedNotifications = true
+            centre.addObserver(self, selector: #selector(relaid), name: NSView.frameDidChangeNotification, object: view)
+        }
+        watched = views
     }
 
     private var buttons: [NSButton] {
@@ -94,6 +107,7 @@ final class Lights: NSObject {
         }
         let buttons = self.buttons
         guard buttons.count == 3, let bar = buttons[0].superview, let container = bar.superview else { return }
+        watch([container, bar] + buttons)
         placing = true
         defer { placing = false }
 

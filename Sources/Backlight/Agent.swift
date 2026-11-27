@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import Observation
 import WebKit
@@ -17,9 +16,6 @@ import WebKit
 // and output and passes each call, a line of JSON, over a socket in
 // Backlight's folder to the running app (AgentListener, here), where it is
 // carried out (AgentTools).
-//
-// All of it is in the build only when that is asked for (`./build.sh
-// agent`, which defines AGENT): without it Backlight has none of this.
 //
 // What keeps it yours (AgentAccess):
 // - Off unless turned on in Settings › Agents.
@@ -729,4 +725,3 @@ nonisolated final class AgentListener: @unchecked Sendable {
         unlink(path)
     }
 }
-#endif

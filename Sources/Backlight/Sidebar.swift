@@ -259,9 +259,7 @@ struct PinnedTile: View {
             .overlay(alignment: .bottomTrailing) {
                 if tab.isPlayingAudio || tab.muteSaid == true { SpeakerButton(tab: tab, size: 12).padding(2) }
             }
-            #if AGENT
             .overlay(alignment: .topTrailing) { AgentMark(tab: tab, size: 8).padding(4) }
-            #endif
             .opacity(tab.isUnloaded ? 0.55 : 1)
             .dropMarks(zone, tile: true, corner: 10)
             .opacity(window.shell.drag.dragging == tab.id ? 0.25 : 1)
@@ -386,9 +384,7 @@ struct TabRow: View {
                     .foregroundStyle(.secondary)
             }
             if tab.isPlayingAudio || tab.muteSaid == true { SpeakerButton(tab: tab, size: 11) }
-            #if AGENT
             AgentMark(tab: tab, size: 10)
-            #endif
             if hovering {
                 Button { window.close(tab) } label: {
                     Image(systemName: "xmark")

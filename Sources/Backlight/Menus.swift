@@ -29,9 +29,7 @@ enum Menus {
     private static func app() -> NSMenu {
         let menu = NSMenu(title: "Backlight")
         menu.addItem(item("About Backlight", #selector(AppDelegate.showAbout(_:))))
-        #if AGENT
         menu.addItem(item("Check for Updates…", #selector(AppDelegate.checkForUpdates(_:))))
-        #endif
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(AppDelegate.showSettings(_:)), ","))
         menu.addItem(item("Keyboard Shortcuts…", #selector(AppDelegate.showShortcuts(_:))))

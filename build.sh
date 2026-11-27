@@ -3,23 +3,22 @@
 #
 #   ./build.sh            release build into build/Backlight.app
 #   ./build.sh debug      same, from a debug build
-#   ./build.sh agent      with the agent tools (Sources/Backlight/Agent*.swift),
-#                         which are in the build only when asked for; goes
-#                         with debug too
+#
+# There is one build: the agent tools (Sources/Backlight/Agent*.swift) are
+# always in it, off until Settings › Agents turns them on. "agent" is still
+# taken, and changes nothing, for scripts written before 0.9.11.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 CONFIG="release"
-FLAGS=()
 SCRATCH=".build"
-WITH=""
 for arg in "$@"; do
   case "$arg" in
     debug|release) CONFIG="$arg" ;;
     # Its own build folder, so going between the two doesn't build
     # everything again.
-    agent|claude) FLAGS=(-Xswiftc -DAGENT); SCRATCH=".build-agent"; WITH=" with the agent tools" ;;
-    *) echo "usage: ./build.sh [debug] [agent]" >&2; exit 2 ;;
+    agent|claude) ;;
+    *) echo "usage: ./build.sh [debug]" >&2; exit 2 ;;
   esac
 done
 NAME="Backlight"
@@ -27,10 +26,10 @@ APP="build/$NAME.app"
 # The bundle identifier BasicShell had was com.mbahakeskin.basicshell; what it kept under that is brought
 # over at the first launch of this one (Sources/Backlight/Legacy.swift).
 ID="com.mbahakeskin.backlight"
-VERSION="0.9.10"
+VERSION="0.9.11"
 BUILD="$(date +%Y%m%d%H%M)"
 
-swift build -c "$CONFIG" --scratch-path "$SCRATCH" ${FLAGS[@]+"${FLAGS[@]}"}
+swift build -c "$CONFIG" --scratch-path "$SCRATCH"
 BINARY="$SCRATCH/$CONFIG/$NAME"
 
 rm -rf "$APP"
@@ -108,4 +107,4 @@ for certificate in "Backlight Local Signing" "BasicShell Local Signing"; do
   [ -n "$IDENTITY" ] && break
 done
 codesign --force --options runtime --entitlements "$NAME.entitlements" --sign "${IDENTITY:--}" "$APP"
-echo "Built $APP$WITH"
+echo "Built $APP"

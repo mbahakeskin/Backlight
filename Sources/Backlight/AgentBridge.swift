@@ -1,4 +1,3 @@
-#if AGENT
 import Foundation
 
 // Backlight started with `--mcp`: not the browser, but the program the agent
@@ -263,4 +262,3 @@ nonisolated enum AgentLink {
         return true
     }
 }
-#endif

@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import WebKit
 
@@ -181,4 +180,3 @@ enum AgentPick {
         }
     }
 }
-#endif

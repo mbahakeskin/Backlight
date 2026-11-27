@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import WebKit
 
@@ -211,4 +210,3 @@ enum TouchEmulation {
     })();
     """#
 }
-#endif

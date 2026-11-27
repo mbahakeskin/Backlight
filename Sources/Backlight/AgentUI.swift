@@ -1,9 +1,8 @@
-#if AGENT
 import AppKit
 import SwiftUI
 
-// What you see of the agent in Backlight (see Agent.swift): the frame around
-// a page it works in, and its page in Settings.
+// What you see of the agent in Backlight (see Agent.swift): the pill at the
+// bottom of a page it works in, and its page in Settings.
 
 /// Beside a tab the agent works in, in the sidebar.
 struct AgentMark: View {
@@ -29,58 +28,69 @@ struct AgentMark: View {
     }
 }
 
-/// Around the page while the tab shown is one the agent works in: a line in
-/// the agent's colour, and at the bottom what is going on, with the button
-/// that stops it.
+/// At the bottom of the page while the tab shown is one the agent works in: that it is, and the button that
+/// stops it. What it does is shown by the pointer it moves (AgentCursorView); words changing here would cost
+/// the main thread a redraw of the pill during each call (measured: 2 to 6 ms a call).
 struct AgentFrame: View {
-    var radius: CGFloat = 0
     /// The tab shown: what is said depends on what the agent is doing in it.
     var tab: Tab?
-    static let pill = CGSize(width: 190, height: 32)
+    /// Where the pill is, in the host's points, so that clicks elsewhere go through to the page.
+    var placed: (CGRect) -> Void = { _ in }
     static let lift: CGFloat = 14
 
     var body: some View {
         let color = Color(nsColor: AgentAccess.color)
-        let finished = tab.flatMap { AgentAccess.shared.presence[$0.id] } == .finished
-        ZStack(alignment: .bottom) {
-            // The line goes quiet once the agent has.
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(color.opacity(finished ? 0.3 : 1), lineWidth: finished ? 1 : 2)
-            HStack(spacing: 8) {
-                Image(systemName: finished ? "checkmark.circle" : "cursorarrow.rays")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(finished ? Color.secondary : color)
-                // Short enough to be read whole; "unasked" is the one thing worth the room (bypass).
-                Text(finished ? "Agent done" : (AgentAccess.bypass ? "Agent at work · unasked" : "Agent at work"))
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                    .fixedSize()
-                Spacer(minLength: 0)
-                if !finished {
-                    Button("Stop") { AgentAccess.shared.stopNow() }
-                        .buttonStyle(.borderless)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(color)
-                        .help("Stops the agent here, and in every other tab, until you let it carry on")
-                }
+        let access = AgentAccess.shared
+        let finished = tab.flatMap { access.presence[$0.id] } == .finished
+        HStack(spacing: 8) {
+            Image(systemName: finished ? "checkmark.circle" : "cursorarrow.rays")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(finished ? Color.secondary : color)
+            Text(finished ? "Agent done" : "Agent at work")
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+            // "unasked" is the one thing worth the room (bypass).
+            if AgentAccess.bypass, !finished {
+                Text("unasked").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize()
             }
-            .padding(.horizontal, 12)
-            .frame(width: AgentAccess.bypass && !finished ? 250 : AgentFrame.pill.width, height: AgentFrame.pill.height)
-            .glassEffect(.regular, in: .capsule)
-            .padding(.bottom, AgentFrame.lift)
+            if !finished {
+                Button("Stop") { AgentAccess.shared.stopNow() }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(color)
+                    .help("Stops the agent here, and in every other tab, until you let it carry on")
+                    .fixedSize()
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 12)
+        .frame(minWidth: 150, maxWidth: 440, minHeight: 32, maxHeight: 32)
+        .fixedSize(horizontal: true, vertical: false)
+        .glassEffect(.regular, in: .capsule)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { placed($0) }
+        .padding(.bottom, AgentFrame.lift)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 }
 
-/// Shows the frame but lets every click through to the page, except on the
-/// pill at the bottom.
+/// Shows the pill but lets every click through to the page, except on the pill itself.
 final class AgentFrameHost: NSHostingView<AgentFrame> {
+    private var pill = CGRect.zero
+
+    convenience init(tab: Tab?) {
+        self.init(rootView: AgentFrame(tab: tab))
+        sizingOptions = []
+        safeAreaRegions = []
+        show(tab)
+    }
+
+    func show(_ tab: Tab?) {
+        rootView = AgentFrame(tab: tab) { [weak self] in self?.pill = $0 }
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let here = convert(point, from: superview)
-        let fromBottom = isFlipped ? bounds.maxY - here.y : here.y - bounds.minY
-        let pill = AgentFrame.pill
-        guard abs(here.x - bounds.midX) <= pill.width / 2, fromBottom >= AgentFrame.lift, fromBottom <= AgentFrame.lift + pill.height else { return nil }
+        let local = isFlipped ? here : NSPoint(x: here.x, y: bounds.height - here.y)
+        guard pill.insetBy(dx: -2, dy: -2).contains(local) else { return nil }
         return super.hitTest(point)
     }
 }
@@ -154,6 +164,50 @@ struct AgentSettings: View {
         get { _newPolicy.wrappedValue }
         nonmutating set { _newPolicy.wrappedValue = newValue }
     }
+    private var _added = State(initialValue: [AgentConnect.Agent: AgentConnect.Added]())
+    /// What each agent's own file says of Backlight, looked at when this page opens and after each Add.
+    private var added: [AgentConnect.Agent: AgentConnect.Added] {
+        get { _added.wrappedValue }
+        nonmutating set { _added.wrappedValue = newValue }
+    }
+    private func lookAgain() { Task { added = await AgentConnect.lookUp() } }
+    private func said(_ message: String) {
+        status = message
+        lookAgain()
+    }
+
+    /// A tick when the agent has Backlight, a warning when it has another copy of it.
+    @ViewBuilder
+    private func mark(_ agent: AgentConnect.Agent) -> some View {
+        switch added[agent] {
+        case .yes:
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Added").foregroundStyle(.secondary)
+            }
+            .help("Its settings have this Backlight.")
+        case .elsewhere(let path):
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .help("Its settings have Backlight at \(path), not this one. Add puts this one in.")
+        case .older:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .help("An older version of the skill is there. Add writes this one.")
+        default:
+            EmptyView()
+        }
+    }
+
+    /// The line under an agent's name, saying what is wrong when something is.
+    private func detail(_ agent: AgentConnect.Agent, _ plain: String) -> String {
+        switch added[agent] {
+        case .elsewhere: "It has another copy of Backlight (an older place, or a test copy). Add puts this one in."
+        case .older: "An older version is there. Add writes this one."
+        default: plain
+        }
+    }
+
     private var _siteProblem = State(initialValue: "")
     private var siteProblem: String {
         get { _siteProblem.wrappedValue }
@@ -188,43 +242,56 @@ struct AgentSettings: View {
                 Section {
                     LabeledContent {
                         HStack {
+                            mark(.code)
                             Button("Copy Command") {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(AgentConnect.command, forType: .string)
                                 status = "Copied. Paste it into a terminal."
                             }
-                            Button("Add") { status = "Adding…"; AgentConnect.addToCode { status = $0 } }
+                            Button("Add") { status = "Adding…"; AgentConnect.addToCode { said($0) } }
                                 .disabled(AgentConnect.code == nil)
                         }
                     } label: {
                         Text("Claude Code")
-                        Text(AgentConnect.code == nil ? "Not found on this Mac; the command adds it wherever it is." : "For every project. Sessions started after have it.")
+                        Text(detail(.code, AgentConnect.code == nil ? "Not found on this Mac; the command adds it wherever it is." : "For every project. Sessions started after have it."))
                     }
                     LabeledContent {
-                        Button("Add") { status = "Adding…"; AgentConnect.addToCodex { status = $0 } }
-                            .disabled(AgentConnect.codex == nil)
+                        HStack {
+                            mark(.codex)
+                            Button("Add") { status = "Adding…"; AgentConnect.addToCodex { said($0) } }
+                                .disabled(AgentConnect.codex == nil)
+                        }
                     } label: {
                         Text("Codex")
-                        Text(AgentConnect.codex == nil ? "Not found on this Mac." : "The Codex command line and app. Written into ~/.codex/config.toml; start a new session after.")
+                        Text(detail(.codex, AgentConnect.codex == nil ? "Not found on this Mac." : "The Codex command line and app. Written into ~/.codex/config.toml; start a new session after."))
                     }
                     LabeledContent {
-                        Button("Add") { status = AgentConnect.addToApp() }
-                            .disabled(!AgentConnect.appIsHere)
+                        HStack {
+                            mark(.app)
+                            Button("Add") { said(AgentConnect.addToApp()) }
+                                .disabled(!AgentConnect.appIsHere)
+                        }
                     } label: {
                         Text("Claude app")
-                        Text(AgentConnect.appIsHere ? "Written into the app's own settings; quit and reopen Claude after." : "Not found on this Mac.")
+                        Text(detail(.app, AgentConnect.appIsHere ? "Written into the app's own settings; quit and reopen Claude after." : "Not found on this Mac."))
                     }
                     LabeledContent {
-                        Button("Add") { status = AgentConnect.addToAntigravity() }
+                        HStack {
+                            mark(.antigravity)
+                            Button("Add") { said(AgentConnect.addToAntigravity()) }
+                        }
                     } label: {
                         Text("Antigravity")
-                        Text("Written into ~/.gemini/config/mcp_config.json; restart it after.")
+                        Text(detail(.antigravity, "Written into ~/.gemini/config/mcp_config.json; restart it after."))
                     }
                     LabeledContent {
-                        Button("Add") { status = AgentConnect.addSkill() }
+                        HStack {
+                            mark(.skill)
+                            Button("Add") { said(AgentConnect.addSkill()) }
+                        }
                     } label: {
                         Text("Skill for Claude Code")
-                        Text("How to use these tools without wasting turns. Written into ~/.claude/skills/backlight.")
+                        Text(detail(.skill, "How to use these tools without wasting turns. Written into ~/.claude/skills/backlight."))
                     }
                     LabeledContent {
                         Button("Copy Config") {
@@ -397,6 +464,7 @@ struct AgentSettings: View {
             }
         }
         .formStyle(.grouped)
+        .task { added = await AgentConnect.lookUp() }
         .scrollContentBackground(.hidden)
     }
 
@@ -417,6 +485,65 @@ struct AgentSettings: View {
 /// Telling the agent where Backlight is.
 enum AgentConnect {
     private static var program: String { Bundle.main.executablePath ?? "" }
+
+    /// Whether an agent has Backlight in its list, as its own file says.
+    enum Added: Equatable, Sendable {
+        case yes
+        /// It has Backlight, but another copy of it (an older place, or a test copy).
+        case elsewhere(String)
+        /// The skill is there, but an older one.
+        case older
+        case no
+    }
+
+    enum Agent: String, CaseIterable, Sendable { case code, codex, app, antigravity, skill }
+
+    /// What each agent's file says now. Read off the main thread: Claude Code's file can be several megabytes.
+    @concurrent nonisolated static func lookUp(program: String, skill: String) async -> [Agent: Added] {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        func json(_ path: String) -> String? {
+            guard let data = try? Data(contentsOf: home.appendingPathComponent(path)),
+                  let read = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let entry = (read["mcpServers"] as? [String: Any])?["backlight"] as? [String: Any]
+            else { return nil }
+            return entry["command"] as? String ?? ""
+        }
+        /// Codex keeps TOML: the `command` under `[mcp_servers.backlight]`.
+        func toml(_ path: String) -> String? {
+            guard let text = try? String(contentsOf: home.appendingPathComponent(path), encoding: .utf8) else { return nil }
+            var inside = false
+            var found: String?
+            for raw in text.split(whereSeparator: \.isNewline) {
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                if line.hasPrefix("[") {
+                    inside = line == "[mcp_servers.backlight]" || line == "[mcp_servers.\"backlight\"]"
+                    if inside { found = found ?? "" }
+                    continue
+                }
+                guard inside, line.hasPrefix("command") else { continue }
+                let value = line.drop(while: { $0 != "=" }).dropFirst().trimmingCharacters(in: .whitespaces)
+                found = value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            }
+            return found
+        }
+        func judged(_ command: String?) -> Added {
+            guard let command else { return .no }
+            return command == program ? .yes : .elsewhere(command)
+        }
+        var out: [Agent: Added] = [:]
+        out[.code] = judged(json(".claude.json"))
+        out[.codex] = judged(toml(".codex/config.toml"))
+        out[.app] = judged(json("Library/Application Support/Claude/claude_desktop_config.json"))
+        out[.antigravity] = judged(json(".gemini/config/mcp_config.json"))
+        if let written = try? String(contentsOf: home.appendingPathComponent(".claude/skills/backlight/SKILL.md"), encoding: .utf8) {
+            out[.skill] = written == skill ? .yes : .older
+        } else {
+            out[.skill] = .no
+        }
+        return out
+    }
+
+    static func lookUp() async -> [Agent: Added] { await lookUp(program: program, skill: AgentSkill.text) }
 
     static var command: String { "claude mcp add --scope user backlight -- \"\(program)\" --mcp" }
 
@@ -532,4 +659,3 @@ enum AgentConnect {
         return "Added to the Claude app. Quit and reopen Claude to finish."
     }
 }
-#endif

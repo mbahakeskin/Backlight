@@ -16,9 +16,7 @@ enum SettingsWindow {
     static let tabs: [(id: String, title: String)] = {
         var list = [("general", "General"), ("search", "Search"), ("import", "Import"), ("tabs", "Tabs"),
                     ("privacy", "Privacy"), ("extensions", "Extensions")]
-        #if AGENT
         list.append(("agent", "Agents"))
-        #endif
         return list
     }()
 }
@@ -56,9 +54,7 @@ struct SettingsContent: View {
         case "tabs": TabSettings()
         case "privacy": PrivacySettings()
         case "extensions": ExtensionSettings()
-        #if AGENT
         case "agent": AgentSettings()
-        #endif
         default: GeneralSettings()
         }
     }
@@ -142,9 +138,7 @@ private struct GeneralSettings: View {
                 }
                 Button("Open Debug Log") { DebugWindow.show() }
             }
-            #if AGENT
             UpdateSection()
-            #endif
             Section {
                 Button("Make Backlight the Default Browser") {
                     let app = Bundle.main.bundleURL
@@ -508,7 +502,6 @@ private struct ExtensionSettings: View {
     }
 }
 
-#if AGENT
 /// Version, and looking for a newer one (see Update.swift).
 private struct UpdateSection: View {
     var body: some View {
@@ -532,7 +525,6 @@ private struct UpdateSection: View {
         }
     }
 }
-#endif
 
 /// Sites the address field searches by a keyword: "yt lofi", "cl write a poem".
 private struct KeywordSettings: View {

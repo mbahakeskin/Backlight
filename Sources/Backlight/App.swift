@@ -3,10 +3,8 @@ import AppKit
 @main
 enum Main {
     static func main() {
-        #if AGENT
         // Started by the agent, to talk to the browser that is running (AgentBridge).
         if CommandLine.arguments.contains("--mcp") { AgentBridge.run() }
-        #endif
         // What the app had under its old name (Legacy.swift), before anything reads the new place.
         Legacy.bringAlong()
         let app = NSApplication.shared
@@ -37,11 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Sleep.start()
         DiskUse.start()
         Profiles.shared.removePendingStores()
-        #if AGENT
         AgentAccess.migrateSettings()
         AgentAccess.shared.start()
         Updater.shared.start()
-        #endif
         NSApp.mainMenu = Menus.build()
         // Pages open once the extensions are in (see Extensions.start).
         Extensions.shared.start { [weak self] in self?.extensionsLoaded() }
@@ -57,9 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if !waiting.isEmpty { open(waiting) }
         waiting = []
         NSApp.activate()
-        #if AGENT
         Updater.shared.announceIfUpdated()
-        #endif
     }
 
     /// Back from the App Store with uBlock Origin Lite, perhaps.
@@ -115,9 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func showSettings(_ sender: Any?) { SettingsWindow.show() }
     @objc func showShortcuts(_ sender: Any?) { ShortcutsWindow.show() }
     @objc func showImport(_ sender: Any?) { SettingsWindow.show("import") }
-    #if AGENT
     @objc func checkForUpdates(_ sender: Any?) { Task { await Updater.shared.check(manually: true) } }
-    #endif
     @objc func showDebugLog(_ sender: Any?) { DebugWindow.show() }
 
     @objc func reopenTab(_ sender: Any?) {

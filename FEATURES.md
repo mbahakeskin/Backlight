@@ -120,7 +120,7 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   one.
 - Find in the page (`⌘F`): a small field at the page's top right, every
   match marked and counted, `⌘G` and `⇧⌘G` for the next and the one before.
-- Updates (the build with the agent tools, which is what releases are):
+- Updates:
   Backlight menu › Check for Updates…, and once a day by itself unless
   Settings › General turns that off, it asks github.com for the latest release
   and, if its version number is higher than the running one's (0.6.0 over 0.5.3;
@@ -226,11 +226,10 @@ Website: https://mbahakeskin.github.io/Backlight/ (built from `site/`, served fr
   after; "Reset All WebKit Features to Defaults" takes it back. Safari's own
   Debug menu has more (iCloud, CloudKit, AutoFill); that is Safari's, not
   WebKit's.
-- In a build made with the agent tools (what a release is, or
-  `./build.sh agent`), AI agents can use it when you turn that on: Claude Code,
+- AI agents can use it when you turn that on: Claude Code,
   the Claude app, Antigravity or any other that speaks the Model Context
   Protocol get tools for the tabs and the pages in them. See
-  [Agents](#agents). The plain build has none of it.
+  [Agents](#agents).
 
 Private WebKit features are used, each only where WebKit has it:
 `_suspendPage:` freezes tabs off screen (Settings › Tabs turns it off);
@@ -271,10 +270,10 @@ entitlement Apple grants on request, tied to a paid Developer ID.
 Needs macOS 27 and the Command Line Tools (Swift 6.4); Xcode is not required.
 
     ./build.sh          # build/Backlight.app, ad-hoc signed
-    ./build.sh agent    # the same with the agent tools (see Agents, below)
+    ./build.sh debug    # the same from a debug build
 
-`swift build` alone builds the executable (`-Xswiftc -DAGENT` for the one
-with the agent tools).
+`swift build` alone builds the executable. Since 0.9.11 there is one build:
+the agent tools are always in it, off until Settings › Agents turns them on.
 
 `build.sh` signs with a code-signing identity named "Backlight Local Signing"
 (or "BasicShell Local Signing", the app's old name) if the keychain has one (a self-signed certificate is enough), so macOS keeps
@@ -367,8 +366,7 @@ What this one is, and each is measured or listed further down, under Agents:
   pointer stays where it is; pictures are drawn off the main thread; the tabs
   an agent opened are let go after two minutes.
 - **No account, no subscription, nothing of its own on a server.** MIT
-  licence; its program is the server, over a socket only your user can open;
-  the plain build has none of it.
+  licence; its program is the server, over a socket only your user can open.
 
 The tools each one lists to its agent, side by side (a dash is no tool for it
 in that list; Backlight's from its own, the other two's as Claude is shown them
@@ -402,9 +400,8 @@ the Claude app, Antigravity, or any other MCP client). Why you might want that
 rather than Claude's own browser, Claude in Chrome or ChatGPT's extension is
 the section before this one.
 
-It is in the build only when asked for: `./build.sh agent`, which is also what
-a release is (from 0.6.0 on, a release has this build alone). The plain build,
-`./build.sh`, has no part of it, not the Settings page, not the code.
+It is in every build (from 0.9.11 there is no build without it) and does
+nothing until Settings › Agents turns it on.
 
 Two things for working beside the agent: `pick`, and a page's right-click
 menu › Pick Element for the Agent: you point at an element and the agent is
@@ -531,10 +528,24 @@ The tools:
   95 ms, an overview for 250; now 0), answers are written to the socket from
   another thread, and the socket's buffers are a megabyte, not a few
   kilobytes.
-- The frame and the pill ("Agent at work", with Stop) show while the agent is
-  at work in the tab shown, say "Agent done" 10 seconds after its last call
+- The pill ("Agent at work", with Stop) shows while the agent is at work in
+  the tab shown, with no line around the page (what it does is shown by its
+  pointer; words changing in the pill cost each call 2 to 6 ms of redrawing), say "Agent done" 10 seconds after its last call
   (or at once when its program goes), and are gone 3 seconds later; the tab is
   let go after 2 minutes, not 10, each by a timer set when a call ends.
+- The agent's pointer is drawn over the tab shown: it glides from where it
+  was to what was clicked (a ring where it pressed, orange for a right
+  click), draws a line along a drag, lights a filled field, says the keys
+  (⌘A, ↩ Return; a character alone is just "Typing…") and how far a scroll
+  went. The clicks themselves land at once: during a call what it did is
+  only noted, and it is played once the agent pauses (50 ms without a call),
+  a batch or a long form step by step, in 1.6 s at most. Measured with the
+  model-free bench (7 quick calls, median of 30 rounds): 300.9 ms with the
+  pointer, 299.7 without; drawn during each call it had cost 0.7 ms a call.
+  A tab worked on out of sight draws nothing.
+- Settings › Agents ticks each agent whose own settings have this Backlight
+  (Claude Code, Codex, the Claude app, Antigravity, the skill), and warns
+  when one has another copy of it or an older skill.
 - A picture is the agent's to size: `screenshot` takes `max_width`
   and `quality`, `marks` (the refs drawn on what can be clicked, to answer
   with a number), and `full_page` with `tile` (one view of a long page at a

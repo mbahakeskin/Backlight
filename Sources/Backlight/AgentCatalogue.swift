@@ -1,4 +1,3 @@
-#if AGENT
 import Foundation
 
 // What the agent is handed of each tool is short: its name, a line, its
@@ -175,4 +174,3 @@ extension AgentTools {
         return .text(out)
     }
 }
-#endif

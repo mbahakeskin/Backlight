@@ -1,4 +1,3 @@
-#if AGENT
 import Foundation
 import WebKit
 
@@ -1447,4 +1446,3 @@ enum AgentPage {
         config.userContentController.add(Log.shared, contentWorld: .page, name: logHandler)
     }
 }
-#endif

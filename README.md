@@ -23,10 +23,10 @@ macOS only. Needs macOS 27.
 
 ## Screenshots
 
-An agent at work: the page is framed and a pill says so, with a Stop button.
+An agent at work: its pointer glides to what it clicks, and a pill at the bottom says so, with a Stop button.
 The first time it reads or acts on a site, you are asked.
 
-<p align="center"><img src="docs/screenshots/agent.jpg" alt="The agent frame around a page, with the Agent at work pill" width="900"></p>
+<p align="center"><img src="docs/screenshots/agent.jpg" alt="A page an agent works in, with the Agent at work pill" width="900"></p>
 
 Responsive Design (Develop menu): the page is told it is a phone's or a
 tablet's size, in a frame, with the user agent to match.
@@ -54,8 +54,7 @@ curl -s https://api.github.com/repos/mbahakeskin/Backlight/releases/latest \
 
 ```sh
 git clone https://github.com/mbahakeskin/Backlight.git && cd Backlight
-./build.sh agent      # build/Backlight.app, with the agent tools (what a release is)
-./build.sh            # the plain browser, without them
+./build.sh            # build/Backlight.app (what a release is)
 ```
 
 Updates: a release build looks at GitHub once a day and installs nothing

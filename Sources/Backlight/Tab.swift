@@ -113,7 +113,6 @@ final class Tab: NSObject, Identifiable {
     /// The site whose Develop settings this tab is following (SiteDevelop.swift).
     @ObservationIgnored var developHost: String?
 
-    #if AGENT
     /// Touch events are made for its pages (TouchEmulation.swift), and the script that does it.
     @ObservationIgnored var touch = false
     @ObservationIgnored var touchScript: WKUserScript?
@@ -186,7 +185,6 @@ final class Tab: NSObject, Identifiable {
     @ObservationIgnored var frames: [WKFrameInfo] = []
     /// Files the person let the agent give the next file chooser, and until when.
     @ObservationIgnored var offered: (files: [URL], until: Date)?
-    #endif
 
     /// A new, empty tab. A private one shares the private tabs' cookie jar,
     /// which lives in memory and goes when the app quits (see Web.swift).
@@ -210,11 +208,7 @@ final class Tab: NSObject, Identifiable {
     /// off: what a page asks (location, notifications, opening another app)
     /// is answered no, without a question.
     var agentUnasked: Bool {
-        #if AGENT
         AgentAccess.bypass && AgentAccess.shared.holds(self)
-        #else
-        false
-        #endif
     }
 
     /// What the sidebar and the top bar call it.
@@ -314,9 +308,7 @@ final class Tab: NSObject, Identifiable {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.isLoading = web.isLoading
-                    #if AGENT
                     if web.isLoading { self.loadBegun.wake() } else { self.loadEnded.wake() }
-                    #endif
                     Extensions.shared.changed(self, .loading)
                 }
             },
@@ -334,9 +326,7 @@ final class Tab: NSObject, Identifiable {
 
     func load(_ url: URL) {
         self.url = url
-        #if AGENT
         navigationIntents += 1
-        #endif
         let web = makeWebView()
         if url.isFileURL {
             // A file may read only what sits beside it.
@@ -466,12 +456,10 @@ extension Tab: WKNavigationDelegate {
             host?.open(url, from: self, select: action.modifierFlags.contains(.shift))
             return
         }
-        #if AGENT
         // A move within the page (an anchor) isn't a load.
         let here = webView.url?.absoluteString.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first
         let there = url.absoluteString.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first
         if action.targetFrame?.isMainFrame ?? true, !(url.fragment != nil && here == there) { navigationIntents += 1 }
-        #endif
         // The next document gets the dark pages' script and the download
         // button's, or none: decided
         // here because here is the last moment before it loads.
@@ -505,11 +493,9 @@ extension Tab: WKNavigationDelegate {
         duskFrames = []
         applyMute()
         readerPageChanged()
-        #if AGENT
         // Another page: the frames noted were the last one's.
         frames = []
         commits += 1
-        #endif
         applySiteZoom(webView)
     }
 

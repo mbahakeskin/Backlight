@@ -1,12 +1,9 @@
-#if AGENT
 import AppKit
 import CryptoKit
 import Observation
 
-// Updates. A release is Backlight built with the agent tools (`./build.sh agent`) and put on GitHub as a zip; this checks
-// the latest release and, if its version is newer than the one running, downloads it, checks it, and puts it in place of
-// this app (see `install`). It is in the build with the agent tools alone, because that is the build the releases are: a
-// plain build made from the source would otherwise be turned into one with them.
+// Updates. A release is Backlight built with `./build.sh` and put on GitHub as a zip; this checks the latest release and,
+// if its version is newer than the one running, downloads it, checks it, and puts it in place of this app (see `install`).
 //
 // Which is newer is decided by the version number (0.6.0 against 0.5.3, part by part), not by when either was built: a
 // build made on this Mac from the source has its own time, and a release has the time it was made on another.
@@ -329,4 +326,3 @@ final class Updater: NSObject {
     }
 }
 
-#endif

@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import ImageIO
 import NaturalLanguage
@@ -346,6 +345,9 @@ enum AgentTools {
 
     static func run(_ name: String, _ arguments: [String: Any], for client: String) async -> Reply {
         let started = Date()
+        // The agent's pointer is drawn once the calls are over (see AgentCursor).
+        AgentCursor.callBegan()
+        defer { AgentCursor.callEnded() }
         func work() async -> Reply {
             var reply = await perform(name, arguments, for: client)
             // What the action was to bring about, when the call said so.
@@ -1473,6 +1475,7 @@ private struct Call {
         guard hypot(to.point.x - from.point.x, to.point.y - from.point.y) >= 1 else { throw Refusal(message: "Both ends are the same place.") }
         let marked = await mark(web)
         try stillOn(tab, site)
+        AgentCursor.play(.drag(from: from.point, to: to.point), in: web)
         // The page's own drag and drop (an element with draggable="true"): WebKit starts that drag from the system's
         // own pointer, which events made here don't feed, so the page is given its drag events instead, in the
         // order a browser sends them. A page that has none of it gets the pointer as before.
@@ -1554,9 +1557,11 @@ private struct Call {
             let done = try await script("return __agent.insert(text);", ["text": text], in: web) as? String
             if done == "refused" { throw Refusal(message: secretRefusal) }
             if done != "typed" { AgentInput.insert(text, in: web); await behind(web) }
+            AgentCursor.play(.typing, in: web)
         }
         if flag("submit") {
             await delivered(web, ["keyup"]) { AgentInput.press("Enter", in: web) }
+            AgentCursor.play(.key("Enter"), in: web)
         }
         AgentRecorder.note(tab)
         let now = (try? await script("return __agent.focus();", in: web) as? [String: Any])?["what"] as? String
@@ -1576,6 +1581,7 @@ private struct Call {
                 var known = true
                 await delivered(web, ["keyup"], limit: 0.2) { known = AgentInput.press(key, in: web) }
                 guard known else { throw Refusal(message: "Backlight doesn't know the key \(key).") }
+                AgentCursor.play(.key(key), in: web)
             }
         }
         AgentRecorder.note(tab)
@@ -1603,6 +1609,7 @@ private struct Call {
         }
         await beginAction(tab, web)
         let result = try await script("return __agent.scroll(x, y, dx, dy);", ["x": x, "y": y, "dx": dx, "dy": dy], in: web) as? [String: Any]
+        AgentCursor.play(.scroll(CGPoint(x: x * zoom, y: y * zoom), delta: CGVector(dx: dx * zoom, dy: dy * zoom), moved: result?["moved"] as? Bool == true), in: web)
         await effectsOver(web, tab, cap: 500, pictures: true)
         let header = try await script("return __agent.header();", in: web) as? String ?? ""
         AgentRecorder.note(tab)
@@ -1614,10 +1621,23 @@ private struct Call {
         guard hasTarget, let value = arguments["value"] else { throw Refusal(message: "`fill` wants a field (a ref, a label or a selector) and a value.") }
         let marked = await mark(web)
         guard let meant = try await meant(in: web, fields: true) else { throw Refusal(message: "`fill` wants a field (a ref, a label or a selector).") }
-        let said = try await script("return __agent.fill(ref, value);", ["ref": meant.ref, "value": value], in: web) as? String ?? ""
+        let said = try await filled(meant.ref, value, in: web)
         if said == "refused" { throw Refusal(message: secretRefusal) }
         AgentRecorder.note(tab)
         return .text(said + meant.note + (await after(tab, web, observing: marked)))
+    }
+
+    /// A field filled, and its box asked for in the same call, so that the pointer can be shown there for nothing.
+    private func filled(_ ref: Int, _ value: Any, in web: WKWebView) async throws -> String {
+        let answer = try await script("const said = __agent.fill(ref, value); return [said, said === \"refused\" ? null : __agent.boxOf(ref)];",
+                                      ["ref": ref, "value": value], in: web) as? [Any]
+        let said = answer?.first as? String ?? ""
+        if let box = answer?.last as? [String: Any], let x = box["x"] as? Double, let y = box["y"] as? Double,
+           let w = box["w"] as? Double, let h = box["h"] as? Double, w >= 1, h >= 1 {
+            let zoom = web.pageZoom
+            AgentCursor.play(.fill(CGRect(x: x * zoom, y: y * zoom, width: w * zoom, height: h * zoom)), in: web)
+        }
+        return said
     }
 
     func fillForm() async throws -> Reply {
@@ -1634,7 +1654,7 @@ private struct Call {
                 throw Refusal(message: "Field \(index + 1) wants a `ref`, a `label` or a `selector`, and a `value`." + (done.isEmpty ? "" : " Done before it: \(done.joined(separator: " "))"))
             }
             let ref = meant.ref
-            let said = try await script("return __agent.fill(ref, value);", ["ref": ref, "value": value], in: web) as? String ?? ""
+            let said = try await filled(ref, value, in: web)
             if said == "refused" {
                 throw Refusal(message: "Field \(index + 1) ([\(ref)]) is a password, card or one-time-code field, which Backlight doesn't let the agent fill: ask the person to do it themselves, then carry on." + (done.isEmpty ? "" : " Filled before it: \(done.joined(separator: " "))"))
             }
@@ -1691,8 +1711,10 @@ private struct Call {
         let done = try await script("return __agent.insert(text);", ["text": query], in: web) as? String
         if done == "refused" { throw Refusal(message: secretRefusal) }
         if done != "typed" { AgentInput.insert(query, in: web); await behind(web) }
+        AgentCursor.play(.typing, in: web)
         if choice("submit") != false {
             await delivered(web, ["keyup"]) { AgentInput.press("Enter", in: web) }
+            AgentCursor.play(.key("Enter"), in: web)
         }
         AgentRecorder.note(tab)
         return .text("Searched for \(JSON(query)) in \(found?["what"] as? String ?? "the search field")." + (await after(tab, web, observing: marked)))
@@ -3053,4 +3075,3 @@ enum AgentRecorder {
         return CGImageDestinationFinalize(destination) ? file : nil
     }
 }
-#endif

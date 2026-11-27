@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import WebKit
 
@@ -31,6 +30,12 @@ enum AgentInput {
     private static let simulateMove = NSSelectorFromString("_simulateMouseMove:")
 
     static func move(_ web: WKWebView, to point: CGPoint) {
+        AgentCursor.play(.move(point), in: web)
+        moveQuietly(web, to: point)
+    }
+
+    /// The same, not shown (a click or a drag shows itself).
+    private static func moveQuietly(_ web: WKWebView, to point: CGPoint) {
         guard let event = mouse(.mouseMoved, web, at: point, count: 0, modifiers: []) else { return }
         if web.responds(to: simulateMove) {
             web.perform(simulateMove, with: event)
@@ -44,7 +49,8 @@ enum AgentInput {
     }
 
     static func click(_ web: WKWebView, at point: CGPoint, right: Bool, count: Int, modifiers: NSEvent.ModifierFlags) {
-        move(web, to: point)
+        AgentCursor.play(.click(point, right: right, count: count), in: web)
+        moveQuietly(web, to: point)
         for click in 1...max(count, 1) {
             guard let down = mouse(right ? .rightMouseDown : .leftMouseDown, web, at: point, count: click, modifiers: modifiers),
                   let up = mouse(right ? .rightMouseUp : .leftMouseUp, web, at: point, count: click, modifiers: modifiers)
@@ -62,7 +68,7 @@ enum AgentInput {
     /// The left button pressed at one place, the pointer taken to another in
     /// small steps, and let go there.
     static func drag(_ web: WKWebView, from: CGPoint, to: CGPoint, modifiers: NSEvent.ModifierFlags) async {
-        move(web, to: from)
+        moveQuietly(web, to: from)
         guard let down = mouse(.leftMouseDown, web, at: from, count: 1, modifiers: modifiers) else { return }
         web.mouseDown(with: down)
         try? await Task.sleep(for: .milliseconds(40))
@@ -144,4 +150,3 @@ enum AgentInput {
         return true
     }
 }
-#endif

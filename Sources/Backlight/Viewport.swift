@@ -116,9 +116,7 @@ enum Viewport {
 
     /// Put on a web view when it is made, for what the tab was set to.
     static func apply(to tab: Tab, _ web: WKWebView) {
-        #if AGENT
         if tab.touch { TouchEmulation.apply(to: tab, web) }
-        #endif
         if let agent = tab.userAgent { web.customUserAgent = agent }
         if let look = tab.look { web.appearance = NSAppearance(named: look) }
         // A page made again while it is in a frame: the inspector docks beside it as before.

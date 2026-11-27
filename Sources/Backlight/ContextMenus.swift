@@ -110,12 +110,10 @@ extension Tab {
                 }
             }
         }
-        #if AGENT
         if AgentAccess.enabled, url != nil {
             menu.addItem(.separator())
             menu.addItem(action("Pick Element for the Agent") { [weak self] in if let self { AgentPick.ask(self) } })
         }
-        #endif
         if let inspect { menu.addItem(.separator()); menu.addItem(inspect) }
         return tidy(menu)
     }

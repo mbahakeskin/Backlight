@@ -124,9 +124,9 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
     /// The downloads list is out because a download began, not because it was asked for.
     var downloadsShownByApp = false
     private var findHost: NSHostingView<FindBarView>?
-    #if AGENT
     private var agentFrame: AgentFrameHost?
-    #endif
+    /// The agent's pointer over the page, there with the pill.
+    private var agentCursor: AgentCursorView?
     lazy var finder = PageFinder(state: shell.find)
     /// A picture of an unloaded page, over it while it loads again.
     private var cover: NSImageView?
@@ -344,15 +344,12 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             self.page.frame = pageFrame
             self.peekView?.frame = pageFrame
             self.scrollShot?.view.frame = pageFrame
-            #if AGENT
             self.agentFrame?.frame = pageFrame
-            #endif
+            self.agentCursor?.frame = pageFrame
             self.findHost?.frame = findFrame
         }
         page.layer?.cornerRadius = radius
-        #if AGENT
-        agentFrame?.rootView = AgentFrame(radius: radius, tab: shell.selected)
-        #endif
+        agentFrame?.show(shell.selected)
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Motion.reveal
@@ -838,7 +835,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         if Sleep.keepsAwake(tab.url) { web.isHidden = true } else { web.removeFromSuperview() }
     }
 
-    #if AGENT
     // MARK: - the agent (Agent.swift)
 
     /// A tab the agent works in while another is shown: its page woken, made if
@@ -881,25 +877,34 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
         }
     }
 
-    /// The frame around the page, there while the tab shown is one the agent
-    /// works in.
+    /// The pill at the bottom of the page and the agent's pointer over it, there while the tab shown is one the
+    /// agent works in.
     func agentChanged() {
-        // Framed while the agent is at work in the tab shown, and for a moment once it has finished.
-        let framed = shell.selected.map { AgentAccess.shared.presence[$0.id] != nil } ?? false
-        agentFrame?.rootView = AgentFrame(radius: page.layer?.cornerRadius ?? 0, tab: shell.selected)
-        if framed, agentFrame == nil {
-            let host = AgentFrameHost(rootView: AgentFrame(radius: page.layer?.cornerRadius ?? 0, tab: shell.selected))
-            host.sizingOptions = []
-            host.safeAreaRegions = []
+        // Shown while the agent is at work in the tab shown, and for a moment once it has finished.
+        let presence = shell.selected.flatMap { AgentAccess.shared.presence[$0.id] }
+        agentFrame?.show(shell.selected)
+        if presence != nil, agentFrame == nil {
+            let cursor = AgentCursorView(frame: page.frame)
+            root.addSubview(cursor, positioned: .above, relativeTo: page)
+            agentCursor = cursor
+            let host = AgentFrameHost(tab: shell.selected)
             host.frame = page.frame
-            root.addSubview(host, positioned: .above, relativeTo: page)
+            root.addSubview(host, positioned: .above, relativeTo: cursor)
             agentFrame = host
-        } else if !framed, let host = agentFrame {
+        } else if presence == nil, let host = agentFrame {
             host.removeFromSuperview()
             agentFrame = nil
+            agentCursor?.removeFromSuperview()
+            agentCursor = nil
         }
+        agentCursor?.setFinished(presence == .finished)
     }
-    #endif
+
+    /// What the agent did in a page, drawn over it when it is the page shown here.
+    func agentGestures(_ gestures: [AgentGesture], in web: WKWebView) {
+        guard let agentCursor, !web.isHidden, web.isDescendant(of: page) else { return }
+        agentCursor.play(gestures, from: web)
+    }
 
     /// What `select` notes about a tab coming to the front.
     func recordSeen(_ tab: Tab) {
@@ -933,7 +938,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             let web = current.webView
             current.leavingScreen { [weak self, weak current] in
                 guard let self, let current, let web, current !== self.shell.selected, current.webView === web else { return }
-                #if AGENT
                 // The agent works in it: backstage, where it goes on, focused (AgentBackstage.swift); and once
                 // it is there, it is the agent's to keep, whatever its tab does.
                 if current.isWorkedIn, !PiP.holds(current) {
@@ -941,7 +945,6 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
                     return
                 }
                 if AgentBackstage.holds(web) { return }
-                #endif
                 if PiP.holds(current) || current.isWorkedIn {
                     // Its video is in Picture in Picture, or the agent works in
                     // it: behind the one shown, not hidden, so the page goes
@@ -963,9 +966,7 @@ final class BrowserWindow: NSWindowController, NSWindowDelegate, NSMenuItemValid
             recent.append(tab.id)
             if recent.count > 100 { recent.removeFirst(recent.count - 100) }
         }
-        #if AGENT
         agentChanged()
-        #endif
         cover?.removeFromSuperview()
         cover = nil
         // A reader belongs to its tab's page: the one shown puts its own back below.

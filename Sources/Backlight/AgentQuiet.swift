@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import Observation
 import WebKit
@@ -457,4 +456,3 @@ final class InspectorWatch: NSObject, WKScriptMessageHandler {
         decision.wake()
     }
 }
-#endif

@@ -1,4 +1,3 @@
-#if AGENT
 import Foundation
 
 // A skill for the agents that read them (Claude Code): how to use these
@@ -66,4 +65,3 @@ extension AgentConnect {
         return "Skill written to ~/.claude/skills/backlight. Claude Code sessions started after have it."
     }
 }
-#endif

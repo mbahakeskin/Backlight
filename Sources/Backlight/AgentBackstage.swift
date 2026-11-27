@@ -1,4 +1,3 @@
-#if AGENT
 import AppKit
 import WebKit
 
@@ -135,4 +134,3 @@ enum AgentBackstage {
         return NSPoint(x: area.minX - size.width - 400, y: area.minY - size.height - 400)
     }
 }
-#endif

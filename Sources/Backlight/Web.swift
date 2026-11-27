@@ -45,9 +45,7 @@ enum Web {
         config.userContentController.add(DuskRelay.shared, contentWorld: Dusk.world, name: DuskRelay.name)
         config.userContentController.add(MediaDownload.shared, contentWorld: MediaDownload.world, name: MediaDownload.name)
         YouTubeGuard.attach(to: config)
-        #if AGENT
         AgentPage.attach(to: config)
-        #endif
         // Extensions work in private tabs as well (see Extensions.opened).
         config.webExtensionController = Extensions.shared.controller
         // Off in WebKit unless turned on, and so off in Safari: scripts that
@@ -148,21 +146,17 @@ extension Tab: WKUIDelegate {
         return CGRect(x: frame.minX + across, y: frame.minY, width: width, height: max(frame.height, webView.bounds.height))
     }
 
-    /// A question from the page, shown. In a build with the agent tools the
+    /// A question from the page, shown. The
     /// one that is up is kept with its tab meanwhile, so the agent, in a tab it
     /// works in, can see it and answer it too.
     private func ask(_ alert: NSAlert, _ kind: String, _ message: String, field: NSTextField? = nil, over webView: WKWebView,
                      answered: @escaping (NSApplication.ModalResponse) -> Void) {
-        #if AGENT
         dialog = Question(kind: kind, message: message, alert: alert, field: field)
         Dialogs.show(alert, over: webView) { [weak self] answer in
             self?.dialog = nil
             self?.dialogEnded.wake()
             answered(answer)
         }
-        #else
-        Dialogs.show(alert, over: webView, answered: answered)
-        #endif
     }
 
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
@@ -190,14 +184,12 @@ extension Tab: WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor ([URL]?) -> Void) {
-        #if AGENT
         // Files the person just let the agent give this page (its upload tool).
         if let offered, offered.until > Date() {
             self.offered = nil
             offerTaken.wake()
             return completionHandler(parameters.allowsMultipleSelection ? offered.files : Array(offered.files.prefix(1)))
         }
-        #endif
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = parameters.allowsDirectories
